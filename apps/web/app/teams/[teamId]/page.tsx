@@ -1,4 +1,4 @@
-import { TeamDetail } from "@/components/teams/team-detail"
+import { TeamRedirect } from "@/components/teams/team-redirect"
 
 export default async function TeamPage({
   params,
@@ -6,5 +6,5 @@ export default async function TeamPage({
   params: Promise<{ teamId: string }>
 }) {
   const { teamId } = await params
-  return <TeamDetail teamId={teamId} />
+  return <TeamRedirect teamId={teamId} />
 }

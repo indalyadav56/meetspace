@@ -1,9 +1,45 @@
 import { CalendarClock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { PRIORITY_MAP, STATUS_MAP, tagColor } from "@/lib/config"
+import {
+  ISSUE_TYPES,
+  PRIORITY_MAP,
+  STATUS_MAP,
+  getIssueType,
+  tagColor,
+} from "@/lib/config"
 import { formatDueDate, isOverdue } from "@/lib/date"
-import type { PriorityId, StatusId } from "@/lib/types"
+import type { IssueTypeId, PriorityId, StatusId, Task } from "@/lib/types"
+
+export function IssueTypeIcon({
+  type,
+  className,
+}: {
+  type: IssueTypeId
+  className?: string
+}) {
+  const meta = ISSUE_TYPES[type]
+  const Icon = meta.icon
+  return <Icon className={cn("size-4 shrink-0", meta.color, className)} />
+}
+
+/** Issue-type icon resolved from a task (explicit or inferred from tags). */
+export function TaskTypeIcon({
+  task,
+  className,
+}: {
+  task: Pick<Task, "type" | "tags">
+  className?: string
+}) {
+  const meta = getIssueType(task)
+  const Icon = meta.icon
+  return (
+    <Icon
+      className={cn("size-4 shrink-0", meta.color, className)}
+      aria-label={meta.label}
+    />
+  )
+}
 
 export function PriorityFlag({
   priority,
@@ -44,12 +80,6 @@ export function StatusPill({
       {meta.label}
     </span>
   )
-}
-
-export function StatusIcon({ status, className }: { status: StatusId; className?: string }) {
-  const meta = STATUS_MAP[status]
-  const Icon = meta.icon
-  return <Icon className={cn("size-4 shrink-0", meta.text, className)} />
 }
 
 export function TagBadge({ tag }: { tag: string }) {

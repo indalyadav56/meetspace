@@ -7,6 +7,7 @@ import {
   Flag,
   Hash,
   Plus,
+  Shapes,
   Tag,
   Trash2,
   Users2,
@@ -31,7 +32,6 @@ import {
   SelectGroup,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select"
 import {
   Popover,
@@ -39,12 +39,26 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { UserAvatar } from "@/components/shared/user-avatar"
-import { PriorityFlag, StatusPill, TagBadge } from "@/components/shared/meta-badges"
-import { PRIORITIES, STATUSES, TAG_COLORS } from "@/lib/config"
+import {
+  IssueTypeIcon,
+  PriorityFlag,
+  StatusPill,
+  TagBadge,
+  TaskTypeIcon,
+} from "@/components/shared/meta-badges"
+import {
+  ISSUE_TYPES,
+  PRIORITIES,
+  STATUSES,
+  TAG_COLORS,
+  getIssueType,
+} from "@/lib/config"
 import { timeAgo } from "@/lib/date"
 import { cn } from "@/lib/utils"
 import { useWorkspace } from "@/lib/store"
-import type { PriorityId, StatusId } from "@/lib/types"
+import type { IssueTypeId, PriorityId, StatusId } from "@/lib/types"
+
+const ISSUE_TYPE_LIST = Object.values(ISSUE_TYPES)
 
 function PropertyRow({
   icon: Icon,
@@ -134,7 +148,8 @@ export function TaskDetailSheet({
         className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
       >
         <SheetHeader className="flex-row items-center gap-2 border-b px-5 py-3">
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+            <TaskTypeIcon task={task} />
             {task.key}
           </span>
           {team && (
@@ -150,7 +165,7 @@ export function TaskDetailSheet({
             variant="ghost"
             size="icon"
             className="ml-auto text-muted-foreground hover:text-destructive"
-            aria-label="Delete task"
+            aria-label="Delete issue"
             onClick={() => {
               deleteTask(task.id)
               onOpenChange(false)
@@ -168,7 +183,7 @@ export function TaskDetailSheet({
                 onChange={(e) => updateTask(task.id, { title: e.target.value })}
                 rows={1}
                 className="resize-none border-0 px-0 text-lg! font-semibold shadow-none focus-visible:ring-0 dark:bg-transparent"
-                placeholder="Task title"
+                placeholder="Issue title"
               />
               <Textarea
                 value={task.description}
@@ -184,6 +199,30 @@ export function TaskDetailSheet({
 
             {/* Properties */}
             <div className="flex flex-col gap-3">
+              <PropertyRow icon={Shapes} label="Type">
+                <Select
+                  value={getIssueType(task).id}
+                  onValueChange={(v) => updateTask(task.id, { type: v as IssueTypeId })}
+                >
+                  <SelectTrigger className="h-8 w-fit gap-2 border-0 bg-transparent px-1 shadow-none hover:bg-accent dark:bg-transparent dark:hover:bg-accent">
+                    <span className="flex items-center gap-1.5 text-sm">
+                      <TaskTypeIcon task={task} />
+                      {getIssueType(task).label}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {ISSUE_TYPE_LIST.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          <IssueTypeIcon type={t.id} />
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </PropertyRow>
+
               <PropertyRow icon={Hash} label="Status">
                 <Select
                   value={task.status}

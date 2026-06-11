@@ -7,9 +7,9 @@ export default function MyTasksPage() {
     <div className="flex h-svh flex-col overflow-hidden">
       <PageHeader>
         <div className="flex items-baseline gap-2">
-          <h1 className="text-sm font-semibold">My tasks</h1>
+          <h1 className="text-sm font-semibold">My Issues</h1>
           <p className="hidden text-xs text-muted-foreground sm:block">
-            Assigned to you
+            Issues assigned to you
           </p>
         </div>
       </PageHeader>

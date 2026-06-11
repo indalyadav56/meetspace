@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { Inter, Geist_Mono } from "next/font/google"
 import "./globals.css"
 
 import { ThemeProvider } from "@/components/theme-provider"
@@ -7,9 +7,10 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
+import { CommandMenu } from "@/components/command-menu"
 import { WorkspaceProvider } from "@/lib/store"
 
-const geistSans = Geist({
+const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
 })
@@ -20,9 +21,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Meetspace — Teams & Tasks",
+  title: "Meetspace — Chat & Issues in one place",
   description:
-    "A calm, fast home for your team's work. Organize teams, plan tasks, and ship together.",
+    "A fast, unified workspace for your team — Microsoft Teams style chat and Jira style boards, together.",
 }
 
 export default function RootLayout({
@@ -34,7 +35,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         <ThemeProvider
@@ -49,6 +50,7 @@ export default function RootLayout({
                 <AppSidebar />
                 <SidebarInset className="min-w-0">{children}</SidebarInset>
               </SidebarProvider>
+              <CommandMenu />
               <Toaster />
             </TooltipProvider>
           </WorkspaceProvider>

@@ -52,19 +52,19 @@ export function TaskBoard({
               if (e.currentTarget === e.target) setOverColumn(null)
             }}
             onDrop={() => handleDrop(status.id)}
-            className="flex w-80 shrink-0 flex-col rounded-xl"
+            className="flex w-80 shrink-0 flex-col rounded-2xl bg-muted/20 dark:bg-slate-950/20 border border-border/20 p-3"
           >
-            <div className="mb-2 flex items-center gap-2 px-1">
+            <div className="mb-3 flex items-center gap-2 px-1">
               <span className={cn("size-2.5 rounded-full", status.dot)} />
               <h3 className="text-sm font-semibold">{status.label}</h3>
-              <span className="rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground">
+              <span className="rounded-full bg-muted/60 dark:bg-slate-800/80 px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                 {items.length}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
-                className="ml-auto size-6 text-muted-foreground"
-                aria-label={`Add task to ${status.label}`}
+                className="ml-auto size-6 text-muted-foreground hover:bg-muted/50"
+                aria-label={`Add issue to ${status.label}`}
                 onClick={() => onAddTask(status.id)}
               >
                 <Plus />
@@ -73,8 +73,8 @@ export function TaskBoard({
 
             <div
               className={cn(
-                "flex flex-1 flex-col gap-2 rounded-xl border border-dashed border-transparent p-1 transition-colors",
-                isOver && "border-primary/40 bg-primary/5",
+                "flex flex-1 flex-col gap-2 rounded-xl border border-transparent p-0.5 transition-colors custom-scrollbar overflow-y-auto max-h-[calc(100%-40px)]",
+                isOver && "border-primary/20 bg-primary/[0.02] rounded-xl",
               )}
             >
               {items.map((task) => (
@@ -100,9 +100,7 @@ export function TaskBoard({
                 onClick={() => onAddTask(status.id)}
                 className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                <Plus className="size-4" />
-                New task
-              </button>
+                <Plus className="size-4" />New issue</button>
             </div>
           </section>
         )

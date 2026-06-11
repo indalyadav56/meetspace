@@ -29,11 +29,32 @@ export function isOverdue(iso: string): boolean {
   return daysUntil(iso) < 0
 }
 
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
+/** Clock time for a message, e.g. "9:02 AM". */
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
+/** Stable per-day key (local) for grouping messages. */
+export function dayKey(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
+/** Friendly day divider label: Today / Yesterday / weekday + date. */
+export function dayLabel(iso: string): string {
+  const d = new Date(iso)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+  if (dayKey(iso) === dayKey(today.toISOString())) return "Today"
+  if (dayKey(iso) === dayKey(yesterday.toISOString())) return "Yesterday"
+  return d.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
     day: "numeric",
-    year: "numeric",
   })
 }
 

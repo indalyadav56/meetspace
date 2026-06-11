@@ -19,6 +19,7 @@ import {
   DueDateBadge,
   PriorityFlag,
   TagBadge,
+  TaskTypeIcon,
 } from "@/components/shared/meta-badges"
 import { STATUSES } from "@/lib/config"
 import { cn } from "@/lib/utils"
@@ -56,15 +57,16 @@ export function TaskCard({
         if (e.key === "Enter") onOpen(task)
       }}
       className={cn(
-        "group/card cursor-pointer rounded-xl border bg-card p-3 text-left shadow-xs transition-all hover:border-foreground/15 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "group/card cursor-pointer rounded-xl glass-card glow-card p-3 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         dragging && "opacity-40",
       )}
     >
-      <div className="mb-1.5 flex items-center gap-2">
-        <PriorityFlag priority={task.priority} />
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <TaskTypeIcon task={task} />
         <span className="font-mono text-[11px] text-muted-foreground">
           {task.key}
         </span>
+        <PriorityFlag priority={task.priority} className="ml-0.5" />
         <div
           className="ml-auto opacity-0 transition-opacity group-hover/card:opacity-100 data-[open=true]:opacity-100"
           onClick={(e) => e.stopPropagation()}
@@ -72,7 +74,7 @@ export function TaskCard({
           <DropdownMenu>
             <DropdownMenuTrigger
               className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-              aria-label="Task actions"
+              aria-label="Issue actions"
             >
               <MoreHorizontal className="size-4" />
             </DropdownMenuTrigger>
@@ -95,7 +97,7 @@ export function TaskCard({
                   onSelect={() => deleteTask(task.id)}
                 >
                   <Trash2 />
-                  Delete task
+                  Delete issue
                 </DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>

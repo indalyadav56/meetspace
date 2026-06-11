@@ -9,9 +9,13 @@ import {
   SignalLow,
   AlertTriangle,
   Minus,
+  Bookmark,
+  SquareCheck,
+  Bug,
+  Zap,
   type LucideIcon,
 } from "lucide-react"
-import type { PriorityId, StatusId } from "./types"
+import type { IssueTypeId, Presence, PriorityId, StatusId, Task } from "./types"
 
 export interface StatusMeta {
   id: StatusId
@@ -92,6 +96,36 @@ export const PRIORITY_MAP = Object.fromEntries(
   PRIORITIES.map((p) => [p.id, p]),
 ) as Record<PriorityId, PriorityMeta>
 
+/* ------------------------------------------------------------------ *
+ * Issue types (Jira style)
+ * ------------------------------------------------------------------ */
+
+export interface IssueTypeMeta {
+  id: IssueTypeId
+  label: string
+  icon: LucideIcon
+  /** Icon color. */
+  color: string
+  /** Soft badge tint. */
+  soft: string
+}
+
+export const ISSUE_TYPES: Record<IssueTypeId, IssueTypeMeta> = {
+  story: { id: "story", label: "Story", icon: Bookmark, color: "text-emerald-600 dark:text-emerald-400", soft: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  task: { id: "task", label: "Task", icon: SquareCheck, color: "text-sky-600 dark:text-sky-400", soft: "bg-sky-500/10 text-sky-600 dark:text-sky-400" },
+  bug: { id: "bug", label: "Bug", icon: Bug, color: "text-red-600 dark:text-red-400", soft: "bg-red-500/10 text-red-600 dark:text-red-400" },
+  epic: { id: "epic", label: "Epic", icon: Zap, color: "text-violet-600 dark:text-violet-400", soft: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
+}
+
+/** Resolve a task's issue type — explicit, else inferred from its tags. */
+export function getIssueType(task: Pick<Task, "type" | "tags">): IssueTypeMeta {
+  if (task.type) return ISSUE_TYPES[task.type]
+  const tags = task.tags.map((t) => t.toLowerCase())
+  if (tags.includes("bug")) return ISSUE_TYPES.bug
+  if (tags.includes("feature")) return ISSUE_TYPES.story
+  return ISSUE_TYPES.task
+}
+
 /** Tag → soft color class. Falls back to neutral when unmapped. */
 export const TAG_COLORS: Record<string, string> = {
   design: "bg-pink-500/10 text-pink-600 dark:text-pink-400",
@@ -107,3 +141,27 @@ export const TAG_COLORS: Record<string, string> = {
 export function tagColor(tag: string) {
   return TAG_COLORS[tag.toLowerCase()] ?? "bg-muted text-muted-foreground"
 }
+
+/* ------------------------------------------------------------------ *
+ * Presence (Microsoft Teams style availability)
+ * ------------------------------------------------------------------ */
+
+export interface PresenceMeta {
+  id: Presence
+  label: string
+  /** Solid dot color. */
+  dot: string
+  ring: string
+}
+
+export const PRESENCE: Record<Presence, PresenceMeta> = {
+  available: { id: "available", label: "Available", dot: "bg-emerald-500", ring: "ring-emerald-500" },
+  busy: { id: "busy", label: "Busy", dot: "bg-red-500", ring: "ring-red-500" },
+  dnd: { id: "dnd", label: "Do not disturb", dot: "bg-rose-600", ring: "ring-rose-600" },
+  away: { id: "away", label: "Away", dot: "bg-amber-500", ring: "ring-amber-500" },
+  offline: { id: "offline", label: "Offline", dot: "bg-zinc-400", ring: "ring-zinc-400" },
+}
+
+/** Quick reactions offered on hover, in order. */
+export const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "🎉", "🙏"]
+

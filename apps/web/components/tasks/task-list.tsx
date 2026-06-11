@@ -9,6 +9,7 @@ import {
   DueDateBadge,
   PriorityFlag,
   TagBadge,
+  TaskTypeIcon,
 } from "@/components/shared/meta-badges"
 import { STATUSES } from "@/lib/config"
 import { cn } from "@/lib/utils"
@@ -39,7 +40,8 @@ export function TaskList({
   const toggle = (id: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
 
@@ -72,7 +74,7 @@ export function TaskList({
                 variant="ghost"
                 size="icon"
                 className="size-6 text-muted-foreground"
-                aria-label={`Add task to ${status.label}`}
+                aria-label={`Add issue to ${status.label}`}
                 onClick={() => onAddTask(status.id)}
               >
                 <Plus />
@@ -83,7 +85,7 @@ export function TaskList({
               <div className="overflow-hidden rounded-xl border">
                 {items.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-muted-foreground">
-                    No tasks here yet.
+                    No issues here yet.
                   </p>
                 ) : (
                   items.map((task, i) => {
@@ -103,6 +105,7 @@ export function TaskList({
                           i > 0 && "border-t",
                         )}
                       >
+                        <TaskTypeIcon task={task} />
                         <PriorityFlag priority={task.priority} />
                         <span className="hidden w-16 shrink-0 font-mono text-xs text-muted-foreground sm:inline">
                           {task.key}
