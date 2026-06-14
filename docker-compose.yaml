@@ -1,12 +1,10 @@
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:17
     environment:
       POSTGRES_USER: meetspace
       POSTGRES_PASSWORD: meetspace
       POSTGRES_DB: meetspace
-    ports:
-      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -14,6 +12,56 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  migrator:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile.migrator
+    command: ["up"]
+    env_file:
+      - ./apps/backend/.env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./apps/backend/.env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      target: runner
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    restart: always
+
+  admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+      target: runner
+    ports:
+      - "3001:3000"
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+    restart: always
 
 volumes:
   postgres_data:

@@ -8,6 +8,11 @@ type errorBody struct {
 	Message string `json:"message"`
 }
 
+// ErrorResponse is the envelope returned on errors (used by Swagger annotations).
+type ErrorResponse struct {
+	Error errorBody `json:"error"`
+}
+
 func Data(c *gin.Context, status int, data any) {
 	c.JSON(status, gin.H{"data": data})
 }
