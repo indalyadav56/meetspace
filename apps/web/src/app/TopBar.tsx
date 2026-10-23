@@ -1,11 +1,15 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bell, Keyboard, Settings, Sparkles, LogOut, Menu, Moon, PanelLeft, Pause, Plus, Search, Sun } from 'lucide-react'
+import { Bell, CalendarClock, CheckSquare, FileText, Keyboard, ListChecks, LogOut, Menu, MessageSquareText, Moon, PanelLeft, Pause, PenTool, Plus, Search, Settings, Sparkles, Sun, Target } from 'lucide-react'
 import { clock, useElapsed } from './task/TaskExtras'
 import { useMe, useStore } from '../store/useStore'
-import { Avatar, Logo, MenuItem, Popover, usePopover } from './components/ui'
+import { Avatar, Logo, MenuItem, Modal, Popover, usePopover } from './components/ui'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
+import { cn } from '../lib/utils'
 import { useAssistant } from './ai/useAssistant'
 import { CallPill } from './calls/CallLayer'
+import QuickActions from './QuickActions'
+import { useCall } from './calls/useCall'
 
 export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
   const me = useMe()
@@ -14,6 +18,19 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
   const nav = useNavigate()
   const userMenu = usePopover()
   const newMenu = usePopover()
+  const aiMenu = usePopover()
+  const aiOpen = useAssistant((s) => s.open)
+  const openTaskId = useStore((s) => s.openTaskId)
+  const askAI = (prompt?: string) => {
+    aiMenu.close()
+    if (prompt) useAssistant.getState().ask(prompt)
+    else useAssistant.getState().setOpen(true)
+  }
+  const create = (fn: () => void) => () => {
+    fn()
+    newMenu.close()
+  }
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   const quickTask = () => {
     const listId = lists[0]?.id
@@ -38,7 +55,7 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
 
       <button
         onClick={onSearch}
-        className="surface border-app text-faint mx-auto flex h-8 w-full max-w-md items-center gap-2 rounded-lg border px-3 text-sm"
+        className="surface border-app text-faint mx-auto flex h-8 w-full min-w-0 max-w-md items-center gap-2 rounded-lg border px-3 text-sm"
       >
         <Search size={15} />
         <span className="truncate">Search tasks, docs, lists…</span>
@@ -47,26 +64,56 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
 
       <CallPill />
       <RunningTimer />
+      <QuickActions />
       <button
-        onClick={() => useAssistant.getState().setOpen(!useAssistant.getState().open)}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-teal-500 px-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+        onClick={aiMenu.toggle}
+        aria-expanded={aiMenu.open}
+        className={cn(
+          'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ring-1 transition-colors ring-inset',
+          aiOpen || aiMenu.open
+            ? 'bg-brand-600 text-white ring-brand-600'
+            : 'bg-brand-50 text-brand-700 ring-brand-200 hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30 dark:hover:bg-brand-500/25',
+        )}
         title="Ask AI (⌘J)"
       >
-        <Sparkles size={15} /> <span className="hidden sm:inline">Ask AI</span>
+        <Sparkles size={15} className={aiOpen || aiMenu.open ? '' : 'text-accent-500'} /> <span className="hidden sm:inline">Ask AI</span>
       </button>
-      <button onClick={newMenu.toggle} className="bg-brand-600 hover:bg-brand-700 inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-sm font-semibold text-white">
-        <Plus size={16} /> <span className="hidden sm:inline">New</span>
+      <Popover open={aiMenu.open} anchor={aiMenu.anchor} onClose={aiMenu.close} align="end" width={250}>
+        <MenuItem onClick={() => askAI()}>
+          <Sparkles size={15} className="text-accent-500" /> Ask anything…
+          <kbd className="surface-muted text-faint ml-auto rounded px-1.5 text-[11px]">⌘J</kbd>
+        </MenuItem>
+        <div className="border-app my-1 border-t" />
+        {openTaskId && (
+          <MenuItem onClick={() => askAI('Summarize this task')}>
+            <MessageSquareText size={15} className="text-muted" /> Summarize this task
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => askAI('What should I work on next?')}>
+          <Target size={15} className="text-muted" /> What should I work on next?
+        </MenuItem>
+        <MenuItem onClick={() => askAI("What's overdue?")}>
+          <CalendarClock size={15} className="text-muted" /> What’s overdue?
+        </MenuItem>
+        <MenuItem onClick={() => askAI('Write my standup')}>
+          <ListChecks size={15} className="text-muted" /> Write my standup
+        </MenuItem>
+      </Popover>
+      <button onClick={newMenu.toggle} aria-expanded={newMenu.open} className="bg-brand-600 hover:bg-brand-700 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-white ring-1 ring-brand-600 ring-inset">
+        <Plus size={15} /> <span className="hidden sm:inline">New</span>
       </button>
-      <Popover open={newMenu.open} anchor={newMenu.anchor} onClose={newMenu.close} align="end">
-        <MenuItem onClick={quickTask}>Task</MenuItem>
-        <MenuItem
-          onClick={() => {
-            const id = useStore.getState().addDoc(null)
-            nav(`/app/docs/${id}`)
-            newMenu.close()
-          }}
-        >
-          Doc
+      <Popover open={newMenu.open} anchor={newMenu.anchor} onClose={newMenu.close} align="end" width={200}>
+        <MenuItem onClick={quickTask}>
+          <CheckSquare size={15} className="text-muted" /> Task
+        </MenuItem>
+        <MenuItem onClick={create(() => nav(`/app/docs/${useStore.getState().addDoc(null)}`))}>
+          <FileText size={15} className="text-muted" /> Doc
+        </MenuItem>
+        <MenuItem onClick={create(() => nav(`/app/whiteboards/${useStore.getState().addWhiteboard()}`))}>
+          <PenTool size={15} className="text-muted" /> Whiteboard
+        </MenuItem>
+        <MenuItem onClick={create(() => (useStore.getState().addGoal(), nav('/app/goals')))}>
+          <Target size={15} className="text-muted" /> Goal
         </MenuItem>
       </Popover>
 
@@ -96,15 +143,20 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
         <MenuItem onClick={() => (window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' })), userMenu.close())}>
           <Keyboard size={15} /> Keyboard shortcuts
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            logout()
-            nav('/')
-          }}
-        >
+        <MenuItem onClick={() => (userMenu.close(), setConfirmLogout(true))}>
           <LogOut size={15} /> Log out
         </MenuItem>
       </Popover>
+      <LogoutDialog
+        open={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={() => {
+          setConfirmLogout(false)
+          if (useCall.getState().phase !== 'idle') useCall.getState().leave()
+          logout()
+          nav('/')
+        }}
+      />
     </header>
   )
 }
@@ -119,11 +171,54 @@ function RunningTimer() {
       <button onClick={() => openTask(timer.taskId)} className="flex items-center gap-2 px-2.5 hover:bg-emerald-600" title={task?.title}>
         <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
         <span className="font-mono tabular-nums">{clock(sec)}</span>
-        <span className="hidden max-w-36 truncate lg:inline">{task?.title}</span>
+        <span className="hidden max-w-36 truncate 2xl:inline">{task?.title}</span>
       </button>
       <button onClick={stopTimer} className="flex h-full items-center border-l border-white/25 px-2 hover:bg-emerald-600" aria-label="Stop timer">
         <Pause size={14} />
       </button>
     </span>
+  )
+}
+
+function LogoutDialog({ open, onClose, onConfirm }: { open: boolean; onClose: () => void; onConfirm: () => void }) {
+  const me = useMe()
+  const workspace = useStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId)?.name)
+  const timer = useStore((s) => !!s.timer)
+  const inCall = useCall((s) => s.phase === 'in-call')
+  return (
+    <Modal open={open} onClose={onClose} className="mt-[18vh] max-w-sm">
+      <div role="alertdialog" aria-labelledby="logout-title" aria-describedby="logout-body" className="p-5">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-500/15">
+            <LogOut size={18} />
+          </span>
+          <h2 id="logout-title" className="text-lg font-semibold">
+            Log out of Meetspace?
+          </h2>
+        </div>
+        <div id="logout-body" className="text-muted mt-3 space-y-2 text-sm">
+          <p>
+            You’re signed in as <span className="text-app font-medium">{me.email || me.name}</span>
+            {workspace && (
+              <>
+                {' '}
+                in <span className="text-app font-medium">{workspace}</span>
+              </>
+            )}
+            . You’ll need to log in again to get back.
+          </p>
+          {inCall && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">You’ll leave the call you’re in.</p>}
+          {timer && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">Your timer keeps running until you stop it.</p>}
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="hover-surface rounded-lg px-3.5 py-2 text-sm font-medium">
+            Cancel
+          </button>
+          <button autoFocus onClick={onConfirm} className="rounded-lg bg-red-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-red-700">
+            Log out
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }

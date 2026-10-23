@@ -7,6 +7,7 @@ import { useCall } from '../calls/useCall'
 import { useRecorder } from '../clips/Recorder'
 import ClipPlayer from '../clips/ClipPlayer'
 import { CustomFieldsSection, DependenciesSection, RecurrenceSelect, TimeSection, TimerButton } from './TaskExtras'
+import { GitHubSection } from './GitHubSection'
 import { useTaskResolver } from '../hooks'
 import { AssigneeMenu, Avatar, DateButton, MenuItem, Modal, Popover, PriorityMenu, StatusDot, StatusMenu, Tag, usePopover } from '../components/ui'
 import { RichText } from '../components/RichText'
@@ -378,6 +379,7 @@ function TaskBody({ id }: { id: string }) {
 
           <CustomFieldsSection task={task} />
           {!task.parentId && <DependenciesSection task={task} />}
+          {!task.parentId && <GitHubSection task={task} />}
           <TimeSection task={task} />
         </div>
 

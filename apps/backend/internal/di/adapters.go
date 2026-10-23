@@ -4,6 +4,9 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
+
+	"go.uber.org/zap"
 
 	identityapp "github.com/indalyadav56/meetspace/backend/internal/identity/application"
 	workapp "github.com/indalyadav56/meetspace/backend/internal/work/application"
@@ -102,4 +105,19 @@ func (s snapshot) Snapshot(ctx context.Context, ws, userID string) (map[string]a
 		}
 	}
 	return out, nil
+}
+
+// inviteMailer emails people added to a workspace (best effort: failures are logged).
+type inviteMailer struct {
+	auth  *identityapp.AuthService
+	names userDirectory
+	log   *zap.Logger
+}
+
+func (m inviteMailer) NotifyInvite(ctx context.Context, email, inviterID, workspaceName string) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := m.auth.SendInvite(ctx, email, m.names.DisplayName(ctx, inviterID), workspaceName); err != nil {
+		m.log.Warn("invite email failed", zap.String("to", email), zap.Error(err))
+	}
 }

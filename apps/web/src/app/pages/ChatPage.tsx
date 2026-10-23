@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { format, isToday, isYesterday, parseISO } from 'date-fns'
-import { ArrowUp, CheckSquare, Film, Hash, MessageSquare, MessagesSquare, Pencil, Phone, Plus, SmilePlus, Trash2, Video, X } from 'lucide-react'
+import { ArrowUp, CheckSquare, Film, Hash, MessageSquare, MessagesSquare, Pencil, Phone, PhoneCall, Plus, SmilePlus, Trash2, Video, X } from 'lucide-react'
 import { useCall } from '../calls/useCall'
 import ClipPlayer from '../clips/ClipPlayer'
+import CallsPage from './CallsPage'
 import { clockFrom } from '../calls/CallLayer'
 import { useMe, useStore } from '../../store/useStore'
 import type { Channel, ID, Message } from '../../store/types'
@@ -43,6 +44,18 @@ export default function ChatPage() {
   )
 }
 
+/** Calls & meetings live inside Chat, next to the channels they happen in. */
+export function ChatCalls() {
+  return (
+    <div className="flex h-full min-h-0">
+      <ChannelList active="calls" />
+      <div className="min-w-0 flex-1">
+        <CallsPage />
+      </div>
+    </div>
+  )
+}
+
 function ChannelList({ active }: { active: ID }) {
   const { channels, users, addChannel, openDM } = useStore()
   const me = useMe()
@@ -53,6 +66,7 @@ function ChannelList({ active }: { active: ID }) {
   const [name, setName] = useState('')
   const [topic, setTopic] = useState('')
   const dmPop = usePopover()
+  const liveCalls = useStore((s) => s.callLogs.filter((c) => !c.endedAt && c.liveParticipants?.length).length)
 
   const row = (c: Channel) => {
     const n = unread.get(c.id) ?? 0
@@ -76,6 +90,18 @@ function ChannelList({ active }: { active: ID }) {
         <MessagesSquare size={17} className="text-brand-600 mr-2" />
         <h1 className="font-semibold">Chat</h1>
       </div>
+      <button
+        onClick={() => nav('/app/chat/calls')}
+        className={cn('flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px]', active === 'calls' ? 'bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100 font-medium' : 'hover-surface')}
+      >
+        <PhoneCall size={14} className="text-muted" />
+        <span className="truncate">Calls & meetings</span>
+        {liveCalls > 0 && (
+          <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveCalls} live
+          </span>
+        )}
+      </button>
       <div className="flex items-center px-2 pt-2 pb-1">
         <span className="text-faint text-[11px] font-semibold uppercase">Channels</span>
         <button onClick={() => setCreating(true)} className="text-muted hover-surface ml-auto rounded p-0.5" aria-label="New channel">

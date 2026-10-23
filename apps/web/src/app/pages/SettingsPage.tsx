@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useQueryState } from '../../lib/useQueryState'
 import { Bell, Download, FileUp, Settings, Trash2, UserPlus, Users } from 'lucide-react'
 import { useMe, useStore } from '../../store/useStore'
 import type { MemberRole, Priority, Task } from '../../store/types'
@@ -53,7 +54,7 @@ export default function SettingsPage() {
   const ws = s.workspaces.find((w) => w.id === s.currentWorkspaceId)!
   const myRole = ws.members.find((m) => m.userId === me.id)?.role ?? 'member'
   const canManage = myRole === 'owner' || myRole === 'admin'
-  const [tab, setTab] = useState<'general' | 'members' | 'data' | 'notifications'>('general')
+  const [tab, setTab] = useQueryState<'general' | 'members' | 'data' | 'notifications'>('tab', 'general')
 
   return (
     <div className="h-full overflow-y-auto scroll-thin">
@@ -145,7 +146,7 @@ function Members({ canManage }: { canManage: boolean }) {
               Invite
             </button>
           </div>
-          <p className="text-faint mt-2 text-xs">Demo: invites add the person to this workspace right away; no email is sent.</p>
+          <p className="text-faint mt-2 text-xs">Invited people get access right away and receive an email; anyone new to Meetspace gets a link to set their password.</p>
         </form>
       )}
       <div className="border-app overflow-hidden rounded-xl border">

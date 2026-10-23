@@ -132,7 +132,7 @@ export interface Message {
   callId?: ID | null
 }
 
-export type BoardItemKind = 'note' | 'rect' | 'ellipse' | 'text' | 'path'
+export type BoardItemKind = 'note' | 'rect' | 'ellipse' | 'text' | 'path' | 'diamond' | 'arrow' | 'frame'
 
 export interface BoardItem {
   id: ID
@@ -145,6 +145,15 @@ export interface BoardItem {
   text: string
   points?: [number, number][]
   taskId?: ID | null
+  /** Arrows: the items each end is attached to (the arrow follows them). */
+  fromId?: ID | null
+  toId?: ID | null
+  fontSize?: number
+  bold?: boolean
+  align?: 'left' | 'center'
+  dashed?: boolean
+  locked?: boolean
+  votes?: number
 }
 
 export interface Whiteboard {
@@ -152,6 +161,7 @@ export interface Whiteboard {
   title: string
   items: BoardItem[]
   createdBy: ID
+  createdAt?: string
   updatedAt: string
 }
 
@@ -227,7 +237,7 @@ export interface Doc {
   updatedAt: string
 }
 
-export type NotificationKind = 'assigned' | 'comment' | 'status' | 'mention' | 'due' | 'reminder'
+export type NotificationKind = 'assigned' | 'comment' | 'status' | 'mention' | 'due' | 'reminder' | 'timesheet'
 
 export interface Notification {
   id: ID
@@ -249,6 +259,21 @@ export interface Member {
   userId: ID
   role: MemberRole
   invited?: boolean
+  /** Job title and reporting line, shown in People and the org chart. */
+  title?: string
+  managerId?: ID | null
+}
+
+export interface Team {
+  id: ID
+  name: string
+  color: string
+  description: string
+  leadId: ID | null
+  members: ID[]
+  createdBy: ID
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Workspace {
@@ -359,4 +384,20 @@ export interface Reminder {
   done: boolean
   notified: boolean
   createdAt: string
+}
+
+export type TimesheetStatus = 'open' | 'submitted' | 'approved' | 'rejected'
+
+/** One person's week (Monday–Sunday) of tracked time and its approval state. */
+export interface Timesheet {
+  /** `${userId}:${weekStart}` */
+  id: string
+  userId: ID
+  /** Monday, YYYY-MM-DD */
+  weekStart: string
+  status: TimesheetStatus
+  note: string
+  submittedAt: string | null
+  decidedBy: ID | null
+  decidedAt: string | null
 }

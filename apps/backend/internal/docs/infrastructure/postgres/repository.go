@@ -72,12 +72,12 @@ func (r *Repository) DeleteDoc(ctx context.Context, ws, id string) error {
 	return nil
 }
 
-const wbCols = `id, workspace_id, title, items, COALESCE(created_by::text,''), updated_at`
+const wbCols = `id, workspace_id, title, items, COALESCE(created_by::text,''), created_at, updated_at`
 
 func scanWB(r interface{ Scan(...any) error }) (*domain.Whiteboard, error) {
 	var w domain.Whiteboard
 	var items []byte
-	if err := r.Scan(&w.ID, &w.WorkspaceID, &w.Title, &items, &w.CreatedBy, &w.UpdatedAt); err != nil {
+	if err := r.Scan(&w.ID, &w.WorkspaceID, &w.Title, &items, &w.CreatedBy, &w.CreatedAt, &w.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrWhiteboardNotFound
 		}
@@ -88,8 +88,8 @@ func scanWB(r interface{ Scan(...any) error }) (*domain.Whiteboard, error) {
 }
 
 func (r *Repository) CreateWhiteboard(ctx context.Context, w *domain.Whiteboard) error {
-	return r.db.QueryRowContext(ctx, `INSERT INTO docs.whiteboards (id, workspace_id, title, items, created_by) VALUES (COALESCE(NULLIF($5, '')::uuid, uuidv7()), $1,$2,$3,$4) RETURNING id, updated_at`,
-		w.WorkspaceID, w.Title, []byte(w.Items), w.CreatedBy, w.ID).Scan(&w.ID, &w.UpdatedAt)
+	return r.db.QueryRowContext(ctx, `INSERT INTO docs.whiteboards (id, workspace_id, title, items, created_by) VALUES (COALESCE(NULLIF($5, '')::uuid, uuidv7()), $1,$2,$3,$4) RETURNING id, created_at, updated_at`,
+		w.WorkspaceID, w.Title, []byte(w.Items), w.CreatedBy, w.ID).Scan(&w.ID, &w.CreatedAt, &w.UpdatedAt)
 }
 
 func (r *Repository) GetWhiteboard(ctx context.Context, ws, id string) (*domain.Whiteboard, error) {

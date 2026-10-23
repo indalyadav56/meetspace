@@ -64,6 +64,8 @@ func NewRouter(o Options) *gin.Engine {
 	// Unauthenticated integrations.
 	h.Work.RegisterPublic(v1.Group("/public"), ratelimit.New(30, time.Minute).Middleware())
 	v1.POST("/livekit/webhook", h.Meet.Webhook)
+	// GitHub deliveries are verified with the workspace's webhook secret (HMAC).
+	v1.POST("/integrations/github/webhook/:wid", h.Integrations.Webhook)
 
 	// Realtime: browsers can't set headers on WebSockets, so the token rides in ?access_token.
 	v1.GET("/ws", authRequired, h.Realtime.Connect)
@@ -84,6 +86,8 @@ func NewRouter(o Options) *gin.Engine {
 	h.Media.Register(content)
 	h.Meet.Register(member) // guests can join calls
 	h.Assistant.Register(content)
+	h.Integrations.Register(content)
+	h.Search.Register(member) // guests can search what they can see
 
 	return r
 }

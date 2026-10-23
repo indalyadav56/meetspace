@@ -35,7 +35,7 @@ export default function CallsPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto scroll-thin">
+    <div className="@container h-full overflow-y-auto scroll-thin">
       <div className="mx-auto max-w-5xl p-4 sm:p-6">
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <PhoneCall size={20} className="text-brand-600" />
@@ -43,10 +43,10 @@ export default function CallsPage() {
           <span className="text-muted text-sm">You’re calling as {me?.name}</span>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 @2xl:grid-cols-3">
           <button
             onClick={() => void call.prepare({ title: `${me?.name.split(' ')[0]}’s meeting`, kind: 'video', channelId: null, meetingId: null, invitees: [] })}
-            className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-500 p-5 text-left text-white shadow-sm transition hover:shadow-md"
+            className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-5 text-left text-white shadow-sm transition hover:shadow-md"
           >
             <span className="rounded-xl bg-white/20 p-2.5">
               <Video size={22} />
@@ -58,7 +58,7 @@ export default function CallsPage() {
           </button>
           <button
             onClick={() => void call.prepare({ title: 'Quick huddle', kind: 'audio', channelId: null, meetingId: null, invitees: [] })}
-            className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-teal-600 to-teal-500 p-5 text-left text-white shadow-sm transition hover:shadow-md"
+            className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-accent-600 to-accent-500 p-5 text-left text-white shadow-sm transition hover:shadow-md"
           >
             <span className="rounded-xl bg-white/20 p-2.5">
               <Phone size={22} />

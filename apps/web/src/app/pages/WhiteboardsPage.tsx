@@ -1,31 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import {
-  ArrowLeft,
-  CheckSquare,
-  Circle,
-  Copy,
-  Hand,
-  Maximize,
-  Minus,
-  MousePointer2,
-  Pencil,
-  Plus,
-  PenTool,
-  Redo2,
-  Square,
-  StickyNote,
-  Trash2,
-  Type,
-  Undo2,
-} from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Copy, ExternalLink, LayoutGrid, Link2, List as ListIcon, MoreHorizontal, Pencil, PenTool, Plus, Search, Star, Trash2 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import type { BoardItem, BoardItemKind, Whiteboard } from '../../store/types'
+import type { BoardItem, Whiteboard } from '../../store/types'
 import { Avatar, MenuItem, Popover, usePopover } from '../components/ui'
-import { cn, timeAgo, uid } from '../../lib/utils'
-
-const NOTE_COLORS = ['#fde68a', '#bbf7d0', '#bae6fd', '#fbcfe8', '#ddd6fe', '#fecaca', '#e0e7ff', '#ffffff']
-const INK_COLORS = ['#1f2128', '#4f46e5', '#14b8a6', '#ef4444', '#f59e0b', '#64748b']
+import { cn, timeAgo } from '../../lib/utils'
+import { ItemShape, bounds } from '../whiteboard/shapes'
+import { BOARD_TEMPLATES, cloneItems, type BoardTemplate } from '../whiteboard/templates'
+import { BoardEditor } from '../whiteboard/BoardEditor'
+import { viewedTimes } from '../whiteboard/viewed'
 
 export default function WhiteboardsPage() {
   const { boardId } = useParams()
@@ -33,526 +16,282 @@ export default function WhiteboardsPage() {
   return board ? <BoardEditor key={board.id} board={board} /> : <BoardIndex />
 }
 
-/* ---------------- Index ---------------- */
-
 function Thumb({ items }: { items: BoardItem[] }) {
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   if (!items.length) return <div className="text-faint flex h-full items-center justify-center text-xs">Empty board</div>
-  const xs = items.flatMap((i) => (i.points ? i.points.map((p) => p[0]) : [i.x, i.x + i.w]))
-  const ys = items.flatMap((i) => (i.points ? i.points.map((p) => p[1]) : [i.y, i.y + i.h]))
-  const minX = Math.min(...xs) - 20
-  const minY = Math.min(...ys) - 20
-  const w = Math.max(...xs) - minX + 20
-  const h = Math.max(...ys) - minY + 20
+  const find = (id: string) => byId.get(id)
+  const bs = items.map((i) => bounds(i, find))
+  const minX = Math.min(...bs.map((b) => b.x)) - 20
+  const minY = Math.min(...bs.map((b) => b.y)) - 20
+  const w = Math.max(...bs.map((b) => b.x + b.w)) - minX + 20
+  const h = Math.max(...bs.map((b) => b.y + b.h)) - minY + 20
+  const ordered = [...items.filter((i) => i.kind === 'frame'), ...items.filter((i) => i.kind !== 'frame')]
   return (
     <svg viewBox={`${minX} ${minY} ${w} ${h}`} className="h-full w-full" preserveAspectRatio="xMidYMid meet">
-      {items.map((i) => (
-        <ItemShape key={i.id} item={i} static />
+      {ordered.map((i) => (
+        <ItemShape key={i.id} item={i} find={find} static />
       ))}
     </svg>
   )
 }
 
-function BoardIndex() {
-  const { whiteboards, addWhiteboard, deleteWhiteboard } = useStore()
+type SortKey = 'title' | 'updated' | 'created' | 'viewed'
+const SORTS: Record<SortKey, string> = { title: 'Name', updated: 'Date updated', created: 'Date created', viewed: 'Date viewed' }
+
+const pref = (k: string, v?: string) => {
+  try {
+    if (v === undefined) return localStorage.getItem(`ms.boards.${k}`)
+    localStorage.setItem(`ms.boards.${k}`, v)
+  } catch {
+    /* storage blocked */
+  }
+  return null
+}
+
+function useBoardActions() {
+  const { addWhiteboard, updateWhiteboard, deleteWhiteboard } = useStore()
   const nav = useNavigate()
+  return {
+    create: (t?: BoardTemplate) => {
+      const id = addWhiteboard()
+      if (t) updateWhiteboard(id, { title: t.title, items: cloneItems(t.items(), 0, 0) })
+      nav(`/app/whiteboards/${id}`)
+    },
+    duplicate: (w: Whiteboard) => {
+      const copy = addWhiteboard()
+      updateWhiteboard(copy, { title: `${w.title} (copy)`, items: cloneItems(w.items, 0, 0, (i) => w.items.find((x) => x.id === i)) })
+    },
+    rename: (w: Whiteboard) => {
+      const t = prompt('Rename whiteboard', w.title)
+      if (t?.trim()) updateWhiteboard(w.id, { title: t.trim() })
+    },
+    remove: (w: Whiteboard) => confirm(`Delete “${w.title}”?`) && deleteWhiteboard(w.id),
+    copyLink: (w: Whiteboard) => void navigator.clipboard.writeText(`${location.origin}/app/whiteboards/${w.id}`),
+  }
+}
+
+function RowMenu({ w }: { w: Whiteboard }) {
+  const pop = usePopover()
+  const nav = useNavigate()
+  const a = useBoardActions()
+  const act = (fn: () => void) => () => (fn(), pop.close())
+  return (
+    <>
+      <button onClick={pop.toggle} className="text-faint hover:text-app rounded p-1" aria-label={`Actions for ${w.title}`}>
+        <MoreHorizontal size={16} />
+      </button>
+      <Popover open={pop.open} anchor={pop.anchor} onClose={pop.close} align="end" width={190}>
+        <MenuItem onClick={act(() => nav(`/app/whiteboards/${w.id}`))}>
+          <ExternalLink size={14} /> Open
+        </MenuItem>
+        <MenuItem onClick={act(() => a.rename(w))}>
+          <Pencil size={14} /> Rename
+        </MenuItem>
+        <MenuItem onClick={act(() => a.duplicate(w))}>
+          <Copy size={14} /> Duplicate
+        </MenuItem>
+        <MenuItem onClick={act(() => a.copyLink(w))}>
+          <Link2 size={14} /> Copy link
+        </MenuItem>
+        <div className="border-app my-1 border-t" />
+        <MenuItem danger onClick={act(() => a.remove(w))}>
+          <Trash2 size={14} /> Delete
+        </MenuItem>
+      </Popover>
+    </>
+  )
+}
+
+function BoardIndex() {
+  const { whiteboards, favorites, toggleFavorite, currentUserId } = useStore()
+  const [params] = useSearchParams()
+  const mine = params.get('mine') === '1'
+  const a = useBoardActions()
+  const [q, setQ] = useState('')
+  const [sort, setSortState] = useState<SortKey>(() => (pref('sort') as SortKey) || 'updated')
+  const [desc, setDesc] = useState(() => pref('desc') !== '0')
+  const [view, setViewState] = useState<'table' | 'grid'>(() => (pref('view') === 'grid' ? 'grid' : 'table'))
+  const [copied, setCopied] = useState<string | null>(null)
+  const sortPop = usePopover()
+  const newPop = usePopover()
+  const viewed = useMemo(() => viewedTimes(), [])
+
+  const setSort = (k: SortKey) => {
+    const d = sort === k ? !desc : k !== 'title'
+    setSortState(k)
+    setDesc(d)
+    pref('sort', k)
+    pref('desc', d ? '1' : '0')
+  }
+  const setView = (v: 'table' | 'grid') => (setViewState(v), pref('view', v))
+
+  const shown = useMemo(() => {
+    const needle = q.toLowerCase()
+    const value = (w: Whiteboard) => (sort === 'title' ? w.title.toLowerCase() : sort === 'updated' ? w.updatedAt : sort === 'created' ? (w.createdAt ?? '') : (viewed[w.id] ?? ''))
+    return whiteboards
+      .filter((w) => !mine || w.createdBy === currentUserId)
+      .filter((w) => !needle || w.title.toLowerCase().includes(needle) || w.items.some((i) => i.text.toLowerCase().includes(needle)))
+      .sort((x, y) => (desc ? -1 : 1) * value(x).localeCompare(value(y)))
+  }, [whiteboards, mine, currentUserId, q, sort, desc, viewed])
+
+  const head = (k: SortKey, className?: string) => (
+    <button onClick={() => setSort(k)} className={cn('inline-flex items-center gap-1 text-left hover:text-[var(--text)]', sort === k && 'text-brand-600', className)}>
+      {SORTS[k]}
+      {sort === k && (desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
+    </button>
+  )
+  const when = (iso?: string) => (iso ? timeAgo(iso) : '—')
+
   return (
     <div className="h-full overflow-y-auto scroll-thin">
-      <div className="mx-auto max-w-5xl p-4 sm:p-6">
-        <div className="mb-5 flex items-center gap-3">
+      <div className="mx-auto max-w-6xl p-4 sm:p-6">
+        <div className="mb-5 flex flex-wrap items-center gap-3">
           <PenTool size={20} className="text-brand-600" />
-          <h1 className="text-xl font-bold">Whiteboards</h1>
-          <button onClick={() => nav(`/app/whiteboards/${addWhiteboard()}`)} className="bg-brand-600 hover:bg-brand-700 ml-auto inline-flex h-8 items-center gap-1 rounded-md px-3 text-sm font-semibold text-white">
-            <Plus size={15} /> New whiteboard
-          </button>
+          <h1 className="text-xl font-bold">{mine ? 'My whiteboards' : 'All whiteboards'}</h1>
+          <div className="ml-auto flex">
+            <button onClick={() => a.create()} className="bg-brand-600 hover:bg-brand-700 inline-flex h-8 items-center gap-1 rounded-l-md px-3 text-sm font-semibold text-white">
+              <Plus size={15} /> New whiteboard
+            </button>
+            <button onClick={newPop.toggle} className="bg-brand-600 hover:bg-brand-700 border-brand-700 inline-flex h-8 items-center rounded-r-md border-l px-1.5 text-white" aria-label="New whiteboard from a template">
+              <ChevronDown size={15} />
+            </button>
+            <Popover open={newPop.open} anchor={newPop.anchor} onClose={newPop.close} align="end" width={250}>
+              <MenuItem onClick={() => (a.create(), newPop.close())}>
+                <Plus size={14} /> Blank whiteboard
+              </MenuItem>
+              <div className="text-faint px-2 pt-2 pb-1 text-[11px] font-semibold uppercase">From a template</div>
+              {BOARD_TEMPLATES.map((t) => (
+                <MenuItem key={t.key} onClick={() => (a.create(t), newPop.close())}>
+                  <span>{t.emoji}</span> {t.title}
+                </MenuItem>
+              ))}
+            </Popover>
+          </div>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {whiteboards.map((w) => (
-            <div key={w.id} className="group border-app hover:border-brand-500 relative overflow-hidden rounded-xl border transition-colors">
-              <Link to={`/app/whiteboards/${w.id}`} className="block">
-                <div className="surface-subtle h-40 p-3" style={{ backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: '14px 14px' }}>
-                  <Thumb items={w.items} />
-                </div>
-                <div className="flex items-center gap-2 p-3">
-                  <Avatar userId={w.createdBy} size={20} />
-                  <span className="truncate text-sm font-semibold">{w.title}</span>
-                  <span className="text-faint ml-auto shrink-0 text-xs">{timeAgo(w.updatedAt)}</span>
-                </div>
-              </Link>
-              <button
-                onClick={() => confirm(`Delete “${w.title}”?`) && deleteWhiteboard(w.id)}
-                className="surface absolute top-2 right-2 hidden rounded-md p-1.5 text-red-500 shadow group-hover:block"
-                aria-label="Delete whiteboard"
-              >
-                <Trash2 size={14} />
+
+        <section className="mb-6">
+          <h2 className="text-muted mb-2 text-xs font-semibold tracking-wide uppercase">Templates</h2>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {BOARD_TEMPLATES.map((t) => (
+              <button key={t.key} onClick={() => a.create(t)} className="border-app surface-subtle hover:border-brand-500 flex items-center gap-3 rounded-xl border p-3 text-left">
+                <span className="surface border-app flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-xl">{t.emoji}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{t.title}</span>
+                  <span className="text-faint block truncate text-xs">{t.hint}</span>
+                </span>
               </button>
+            ))}
+          </div>
+        </section>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <button onClick={sortPop.toggle} className="border-app hover-surface inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium">
+            <ArrowUpDown size={13} /> Sort: {SORTS[sort]}
+          </button>
+          <Popover open={sortPop.open} anchor={sortPop.anchor} onClose={sortPop.close} width={180}>
+            {(Object.keys(SORTS) as SortKey[]).map((k) => (
+              <MenuItem key={k} active={sort === k} onClick={() => (setSort(k), sortPop.close())}>
+                {SORTS[k]}
+              </MenuItem>
+            ))}
+          </Popover>
+          <span className="text-faint text-xs">{shown.length} whiteboards</span>
+          <div className="border-app ml-auto flex h-8 items-center gap-2 rounded-md border px-2">
+            <Search size={14} className="text-faint" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search boards and stickies" className="w-44 bg-transparent text-sm outline-none" />
+          </div>
+          <div className="border-app flex rounded-md border p-0.5">
+            {(
+              [
+                ['table', ListIcon],
+                ['grid', LayoutGrid],
+              ] as const
+            ).map(([v, Icon]) => (
+              <button key={v} onClick={() => setView(v)} aria-label={`${v} view`} aria-pressed={view === v} className={cn('rounded p-1', view === v ? 'surface-muted text-app' : 'text-faint')}>
+                <Icon size={15} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {view === 'table' ? (
+          <div className="border-app overflow-x-auto rounded-xl border">
+            <div className="min-w-[760px]">
+              <div className="text-faint border-app grid grid-cols-[minmax(0,1fr)_110px_110px_110px_110px_70px_36px] items-center gap-2 border-b px-3 py-2 text-xs font-medium">
+                {head('title')}
+                <span>Location</span>
+                {head('updated')}
+                {head('created')}
+                {head('viewed')}
+                <span>Creator</span>
+                <span />
+              </div>
+              {shown.map((w) => {
+                const fav = favorites.includes(w.id)
+                return (
+                  <div key={w.id} className="group border-app hover-surface grid grid-cols-[minmax(0,1fr)_110px_110px_110px_110px_70px_36px] items-center gap-2 border-b px-3 py-2 text-sm last:border-b-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <PenTool size={15} className="text-brand-600 shrink-0" />
+                      <Link to={`/app/whiteboards/${w.id}`} className="truncate font-medium hover:underline">
+                        {w.title || 'Untitled whiteboard'}
+                      </Link>
+                      <span className={cn('flex shrink-0 items-center gap-0.5', !fav && 'opacity-0 group-hover:opacity-100')}>
+                        <button
+                          onClick={() => {
+                            a.copyLink(w)
+                            setCopied(w.id)
+                            setTimeout(() => setCopied(null), 1200)
+                          }}
+                          className="text-faint hover:text-app rounded p-1"
+                          title={copied === w.id ? 'Copied!' : 'Copy link'}
+                          aria-label="Copy link"
+                        >
+                          <Link2 size={13} className={cn(copied === w.id && 'text-emerald-500')} />
+                        </button>
+                        <button onClick={() => toggleFavorite(w.id)} className="rounded p-1" title={fav ? 'Remove from favorites' : 'Add to favorites'} aria-label="Toggle favorite">
+                          <Star size={13} className={fav ? 'fill-amber-400 text-amber-400' : 'text-faint'} />
+                        </button>
+                        <button onClick={() => a.rename(w)} className="text-faint hover:text-app rounded p-1" title="Rename" aria-label="Rename">
+                          <Pencil size={13} />
+                        </button>
+                      </span>
+                    </div>
+                    <span className="text-muted truncate text-xs">Workspace</span>
+                    <span className="text-muted text-xs">{when(w.updatedAt)}</span>
+                    <span className="text-muted text-xs">{when(w.createdAt)}</span>
+                    <span className="text-muted text-xs">{when(viewed[w.id])}</span>
+                    <Avatar userId={w.createdBy} size={22} />
+                    <RowMenu w={w} />
+                  </div>
+                )
+              })}
+              {shown.length === 0 && <p className="text-muted py-12 text-center text-sm">{q ? 'No whiteboards match.' : mine ? 'You haven’t created a whiteboard yet.' : 'No whiteboards yet.'}</p>}
             </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ---------------- Shapes ---------------- */
-
-function darker(hex: string) {
-  const n = parseInt(hex.slice(1), 16)
-  const f = (c: number) => Math.max(0, Math.round(c * 0.72))
-  return `rgb(${f(n >> 16)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`
-}
-
-function ItemShape({ item: i, static: isStatic, editing, onText }: { item: BoardItem; static?: boolean; editing?: boolean; onText?: (t: string) => void }) {
-  const label = (align: 'center' | 'top-left', size = 14) =>
-    editing && onText ? (
-      <foreignObject x={i.x} y={i.y} width={i.w} height={i.h}>
-        <textarea
-          autoFocus
-          defaultValue={i.text}
-          onBlur={(e) => onText(e.target.value)}
-          onKeyDown={(e) => {
-            e.stopPropagation()
-            if (e.key === 'Escape') (e.target as HTMLTextAreaElement).blur()
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="h-full w-full resize-none bg-transparent p-3 outline-none"
-          style={{ fontSize: size, textAlign: align === 'center' ? 'center' : 'left', color: i.kind === 'text' ? i.color : '#1f2128', fontWeight: i.kind === 'text' ? 700 : 500 }}
-        />
-      </foreignObject>
-    ) : (
-      i.text && (
-        <foreignObject x={i.x} y={i.y} width={i.w} height={i.h} style={{ pointerEvents: 'none' }}>
-          <div
-            className={cn('flex h-full w-full overflow-hidden p-3 leading-snug break-words', align === 'center' ? 'items-center justify-center text-center' : 'items-start')}
-            style={{ fontSize: size, color: i.kind === 'text' ? i.color : '#1f2128', fontWeight: i.kind === 'text' ? 700 : 500 }}
-          >
-            {i.text}
           </div>
-        </foreignObject>
-      )
-    )
-
-  switch (i.kind) {
-    case 'note':
-      return (
-        <g>
-          <rect x={i.x + 2} y={i.y + 4} width={i.w} height={i.h} rx={6} fill="rgb(0 0 0 / 0.08)" />
-          <rect x={i.x} y={i.y} width={i.w} height={i.h} rx={6} fill={i.color} />
-          {label('top-left', 15)}
-          {i.taskId && !isStatic && (
-            <g transform={`translate(${i.x + i.w - 22}, ${i.y + 6})`}>
-              <rect width={16} height={16} rx={4} fill="#4f46e5" />
-              <path d="M4 8.5l2.5 2.5L12 5.5" stroke="#fff" strokeWidth={2} fill="none" />
-            </g>
-          )}
-        </g>
-      )
-    case 'rect':
-      return (
-        <g>
-          <rect x={i.x} y={i.y} width={i.w} height={i.h} rx={10} fill={i.color} stroke={darker(i.color)} strokeWidth={1.5} />
-          {label('center')}
-        </g>
-      )
-    case 'ellipse':
-      return (
-        <g>
-          <ellipse cx={i.x + i.w / 2} cy={i.y + i.h / 2} rx={i.w / 2} ry={i.h / 2} fill={i.color} stroke={darker(i.color)} strokeWidth={1.5} />
-          {label('center')}
-        </g>
-      )
-    case 'text':
-      return <g>{label('top-left', 22) || (!isStatic && <rect x={i.x} y={i.y} width={i.w} height={i.h} fill="transparent" />)}</g>
-    case 'path':
-      return <polyline points={(i.points ?? []).map((p) => p.join(',')).join(' ')} fill="none" stroke={i.color} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-  }
-}
-
-function bounds(i: BoardItem) {
-  if (i.kind === 'path' && i.points?.length) {
-    const xs = i.points.map((p) => p[0])
-    const ys = i.points.map((p) => p[1])
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
-  }
-  return { x: i.x, y: i.y, w: i.w, h: i.h }
-}
-
-/* ---------------- Editor ---------------- */
-
-type Tool = 'select' | 'hand' | BoardItemKind
-type Drag =
-  | { type: 'pan'; sx: number; sy: number; px: number; py: number }
-  | { type: 'move'; id: string; sx: number; sy: number; orig: BoardItem }
-  | { type: 'resize'; id: string; sx: number; sy: number; orig: BoardItem }
-  | { type: 'create'; id: string; ox: number; oy: number }
-  | { type: 'draw'; id: string }
-
-const TOOLS: { t: Tool; icon: typeof Square; label: string; key: string }[] = [
-  { t: 'select', icon: MousePointer2, label: 'Select', key: 'v' },
-  { t: 'hand', icon: Hand, label: 'Pan', key: 'h' },
-  { t: 'note', icon: StickyNote, label: 'Sticky note', key: 'n' },
-  { t: 'rect', icon: Square, label: 'Rectangle', key: 'r' },
-  { t: 'ellipse', icon: Circle, label: 'Ellipse', key: 'o' },
-  { t: 'text', icon: Type, label: 'Text', key: 't' },
-  { t: 'path', icon: Pencil, label: 'Pen', key: 'p' },
-]
-
-function BoardEditor({ board }: { board: Whiteboard }) {
-  const { setBoardItems, updateWhiteboard, lists, addTask, openTask } = useStore()
-  const [items, setItems] = useState<BoardItem[]>(board.items)
-  const [tool, setTool] = useState<Tool>('select')
-  const [selected, setSelected] = useState<string | null>(null)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [view, setView] = useState({ x: 0, y: 0, zoom: 1 })
-  const [drag, setDrag] = useState<Drag | null>(null)
-  const [past, setPast] = useState<BoardItem[][]>([])
-  const [future, setFuture] = useState<BoardItem[][]>([])
-  const svg = useRef<SVGSVGElement>(null)
-  const taskPop = usePopover()
-
-  /** Commit a new item list: push undo history and persist. */
-  const commit = useCallback(
-    (next: BoardItem[], prev: BoardItem[] = items) => {
-      setPast((p) => [...p.slice(-49), prev])
-      setFuture([])
-      setItems(next)
-      setBoardItems(board.id, next)
-    },
-    [items, board.id, setBoardItems],
-  )
-  const undo = () => {
-    const prev = past[past.length - 1]
-    if (!prev) return
-    setPast((p) => p.slice(0, -1))
-    setFuture((f) => [items, ...f])
-    setItems(prev)
-    setBoardItems(board.id, prev)
-  }
-  const redo = () => {
-    const next = future[0]
-    if (!next) return
-    setFuture((f) => f.slice(1))
-    setPast((p) => [...p, items])
-    setItems(next)
-    setBoardItems(board.id, next)
-  }
-
-  const world = (e: { clientX: number; clientY: number }) => {
-    const r = svg.current!.getBoundingClientRect()
-    return { x: (e.clientX - r.left) / view.zoom + view.x, y: (e.clientY - r.top) / view.zoom + view.y }
-  }
-
-  const sel = items.find((i) => i.id === selected)
-
-  // keyboard
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (editing || (e.target as HTMLElement).closest('input, textarea')) return
-      const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key.toLowerCase() === 'z') return e.preventDefault(), e.shiftKey ? redo() : undo()
-      if (mod && e.key.toLowerCase() === 'd' && sel) {
-        e.preventDefault()
-        const copy = { ...sel, id: uid('b'), x: sel.x + 24, y: sel.y + 24, points: sel.points?.map(([x, y]) => [x + 24, y + 24] as [number, number]), taskId: null }
-        commit([...items, copy])
-        setSelected(copy.id)
-        return
-      }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
-        commit(items.filter((i) => i.id !== selected))
-        setSelected(null)
-        return
-      }
-      if (e.key === 'Escape') return setSelected(null), setTool('select')
-      const t = TOOLS.find((x) => x.key === e.key.toLowerCase())
-      if (t && !mod) setTool(t.t)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  })
-
-  const onBgDown = (e: React.PointerEvent) => {
-    if (editing) return
-    ;(e.target as Element).setPointerCapture?.(e.pointerId)
-    const p = world(e)
-    if (tool === 'hand' || e.button === 1) {
-      setDrag({ type: 'pan', sx: e.clientX, sy: e.clientY, px: view.x, py: view.y })
-      return
-    }
-    if (tool === 'select') {
-      setSelected(null)
-      setDrag({ type: 'pan', sx: e.clientX, sy: e.clientY, px: view.x, py: view.y })
-      return
-    }
-    const id = uid('b')
-    const base = { id, x: p.x, y: p.y, w: 0, h: 0, text: '', taskId: null }
-    if (tool === 'note') {
-      commit([...items, { ...base, kind: 'note', x: p.x - 85, y: p.y - 65, w: 170, h: 130, color: NOTE_COLORS[0] }])
-      setSelected(id)
-      setEditing(id)
-      setTool('select')
-      return
-    }
-    if (tool === 'text') {
-      commit([...items, { ...base, kind: 'text', w: 260, h: 44, color: INK_COLORS[0] }])
-      setSelected(id)
-      setEditing(id)
-      setTool('select')
-      return
-    }
-    if (tool === 'path') {
-      setItems([...items, { ...base, kind: 'path', color: INK_COLORS[1], points: [[p.x, p.y]] }])
-      setDrag({ type: 'draw', id })
-      return
-    }
-    setItems([...items, { ...base, kind: tool, color: tool === 'rect' ? '#c7d2fe' : '#99f6e4' }])
-    setDrag({ type: 'create', id, ox: p.x, oy: p.y })
-  }
-
-  const onItemDown = (e: React.PointerEvent, item: BoardItem) => {
-    if (tool !== 'select' || editing === item.id) return
-    e.stopPropagation()
-    ;(e.target as Element).setPointerCapture?.(e.pointerId)
-    setSelected(item.id)
-    setDrag({ type: 'move', id: item.id, sx: e.clientX, sy: e.clientY, orig: item })
-  }
-
-  const onMove = (e: React.PointerEvent) => {
-    if (!drag) return
-    if (drag.type === 'pan') {
-      setView((v) => ({ ...v, x: drag.px - (e.clientX - drag.sx) / v.zoom, y: drag.py - (e.clientY - drag.sy) / v.zoom }))
-      return
-    }
-    const p = world(e)
-    setItems((cur) =>
-      cur.map((i) => {
-        if (i.id !== drag.id) return i
-        if (drag.type === 'move') {
-          const dx = (e.clientX - drag.sx) / view.zoom
-          const dy = (e.clientY - drag.sy) / view.zoom
-          return { ...i, x: drag.orig.x + dx, y: drag.orig.y + dy, points: drag.orig.points?.map(([x, y]) => [x + dx, y + dy] as [number, number]) }
-        }
-        if (drag.type === 'resize') {
-          return { ...i, w: Math.max(40, drag.orig.w + (e.clientX - drag.sx) / view.zoom), h: Math.max(30, drag.orig.h + (e.clientY - drag.sy) / view.zoom) }
-        }
-        if (drag.type === 'create') {
-          return { ...i, x: Math.min(drag.ox, p.x), y: Math.min(drag.oy, p.y), w: Math.abs(p.x - drag.ox), h: Math.abs(p.y - drag.oy) }
-        }
-        return { ...i, points: [...(i.points ?? []), [p.x, p.y] as [number, number]] }
-      }),
-    )
-  }
-
-  const onUp = () => {
-    if (!drag) return
-    const d = drag
-    setDrag(null)
-    if (d.type === 'pan') return
-    const before = d.type === 'move' || d.type === 'resize' ? items.map((i) => (i.id === d.id ? d.orig : i)) : items.filter((i) => i.id !== d.id)
-    let next = items
-    if (d.type === 'create') {
-      // a click without drag makes a default-sized shape
-      next = items.map((i) => (i.id === d.id && i.w < 8 && i.h < 8 ? { ...i, x: i.x - 70, y: i.y - 45, w: 140, h: 90 } : i))
-      setSelected(d.id)
-      setTool('select')
-    }
-    if (d.type === 'draw') {
-      const it = items.find((i) => i.id === d.id)
-      if (!it || (it.points?.length ?? 0) < 2) next = items.filter((i) => i.id !== d.id)
-    }
-    if (d.type === 'move') {
-      const it = items.find((i) => i.id === d.id)
-      if (it && it.x === d.orig.x && it.y === d.orig.y) return // plain click
-    }
-    commit(next, before)
-  }
-
-  const onWheel = (e: React.WheelEvent) => {
-    const r = svg.current!.getBoundingClientRect()
-    if (e.ctrlKey || e.metaKey) {
-      const factor = Math.exp(-e.deltaY * 0.01)
-      setView((v) => {
-        const zoom = Math.min(3, Math.max(0.2, v.zoom * factor))
-        const mx = (e.clientX - r.left) / v.zoom + v.x
-        const my = (e.clientY - r.top) / v.zoom + v.y
-        return { zoom, x: mx - (e.clientX - r.left) / zoom, y: my - (e.clientY - r.top) / zoom }
-      })
-    } else {
-      setView((v) => ({ ...v, x: v.x + e.deltaX / v.zoom, y: v.y + e.deltaY / v.zoom }))
-    }
-  }
-
-  const zoomBy = (f: number) => setView((v) => ({ ...v, zoom: Math.min(3, Math.max(0.2, v.zoom * f)) }))
-  const fit = () => {
-    if (!items.length || !svg.current) return setView({ x: 0, y: 0, zoom: 1 })
-    const bs = items.map(bounds)
-    const minX = Math.min(...bs.map((b) => b.x))
-    const minY = Math.min(...bs.map((b) => b.y))
-    const maxX = Math.max(...bs.map((b) => b.x + b.w))
-    const maxY = Math.max(...bs.map((b) => b.y + b.h))
-    const r = svg.current.getBoundingClientRect()
-    const zoom = Math.min(2, Math.max(0.2, Math.min(r.width / (maxX - minX + 120), r.height / (maxY - minY + 120))))
-    setView({ zoom, x: minX - (r.width / zoom - (maxX - minX)) / 2, y: minY - (r.height / zoom - (maxY - minY)) / 2 })
-  }
-  useEffect(() => {
-    fit()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const patchSel = (patch: Partial<BoardItem>) => sel && commit(items.map((i) => (i.id === sel.id ? { ...i, ...patch } : i)))
-  const selBounds = sel ? bounds(sel) : null
-  const cursor = tool === 'hand' || drag?.type === 'pan' ? (drag ? 'grabbing' : 'grab') : tool === 'select' ? 'default' : 'crosshair'
-
-  return (
-    <div className="flex h-full flex-col">
-      <header className="border-app flex h-12 shrink-0 items-center gap-2 border-b px-3">
-        <Link to="/app/whiteboards" className="hover-surface text-muted rounded p-1.5" aria-label="All whiteboards">
-          <ArrowLeft size={16} />
-        </Link>
-        <input value={board.title} onChange={(e) => updateWhiteboard(board.id, { title: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" aria-label="Whiteboard title" />
-        <button onClick={undo} disabled={!past.length} className="hover-surface text-muted rounded p-1.5 disabled:opacity-30" title="Undo (⌘Z)">
-          <Undo2 size={16} />
-        </button>
-        <button onClick={redo} disabled={!future.length} className="hover-surface text-muted rounded p-1.5 disabled:opacity-30" title="Redo (⇧⌘Z)">
-          <Redo2 size={16} />
-        </button>
-      </header>
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <svg
-          ref={svg}
-          className="h-full w-full touch-none select-none"
-          style={{ cursor, backgroundColor: 'var(--bg-subtle)', backgroundImage: 'radial-gradient(var(--border) 1.2px, transparent 1.2px)', backgroundSize: `${20 * view.zoom}px ${20 * view.zoom}px`, backgroundPosition: `${-view.x * view.zoom}px ${-view.y * view.zoom}px` }}
-          onPointerDown={onBgDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onWheel={onWheel}
-        >
-          <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
-            {items.map((i) => (
-              <g
-                key={i.id}
-                onPointerDown={(e) => onItemDown(e, i)}
-                onDoubleClick={(e) => {
-                  e.stopPropagation()
-                  if (i.kind !== 'path') {
-                    setSelected(i.id)
-                    setEditing(i.id)
-                  }
-                }}
-                style={{ cursor: tool === 'select' ? 'move' : undefined }}
-              >
-                <ItemShape
-                  item={i}
-                  editing={editing === i.id}
-                  onText={(t) => {
-                    setEditing(null)
-                    if (i.kind === 'text' && !t.trim()) {
-                      commit(items.filter((x) => x.id !== i.id))
-                      setSelected(null)
-                    } else if (t !== i.text) commit(items.map((x) => (x.id === i.id ? { ...x, text: t } : x)))
-                  }}
-                />
-                {i.kind === 'path' && <polyline points={(i.points ?? []).map((p) => p.join(',')).join(' ')} fill="none" stroke="transparent" strokeWidth={14} />}
-              </g>
-            ))}
-            {selBounds && !editing && (
-              <g pointerEvents="none">
-                <rect x={selBounds.x - 4} y={selBounds.y - 4} width={selBounds.w + 8} height={selBounds.h + 8} fill="none" stroke="#4f46e5" strokeWidth={1.5 / view.zoom} strokeDasharray={`${4 / view.zoom} ${3 / view.zoom}`} rx={4} />
-              </g>
-            )}
-            {sel && sel.kind !== 'path' && !editing && (
-              <rect
-                x={sel.x + sel.w - 5 / view.zoom}
-                y={sel.y + sel.h - 5 / view.zoom}
-                width={10 / view.zoom}
-                height={10 / view.zoom}
-                fill="#fff"
-                stroke="#4f46e5"
-                strokeWidth={1.5 / view.zoom}
-                style={{ cursor: 'nwse-resize' }}
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  ;(e.target as Element).setPointerCapture?.(e.pointerId)
-                  setDrag({ type: 'resize', id: sel.id, sx: e.clientX, sy: e.clientY, orig: sel })
-                }}
-              />
-            )}
-          </g>
-        </svg>
-
-        {/* Tool palette */}
-        <div className="surface shadow-pop absolute top-1/2 left-3 flex -translate-y-1/2 flex-col gap-0.5 rounded-xl p-1">
-          {TOOLS.map(({ t, icon: Icon, label, key }) => (
-            <button key={t} onClick={() => setTool(t)} title={`${label} (${key.toUpperCase()})`} className={cn('rounded-lg p-2', tool === t ? 'bg-brand-600 text-white' : 'text-muted hover-surface')}>
-              <Icon size={17} />
-            </button>
-          ))}
-        </div>
-
-        {/* Selection toolbar */}
-        {sel && !editing && (
-          <div className="surface shadow-pop absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-xl p-1.5">
-            {(sel.kind === 'text' || sel.kind === 'path' ? INK_COLORS : NOTE_COLORS).map((c) => (
-              <button key={c} onClick={() => patchSel({ color: c })} className={cn('h-6 w-6 rounded-full border border-black/10', sel.color === c && 'ring-brand-500 ring-2 ring-offset-1')} style={{ background: c }} aria-label={`Color ${c}`} />
-            ))}
-            <span className="border-app mx-1 h-5 border-l" />
-            {sel.kind === 'note' && !sel.taskId && (
-              <>
-                <button onClick={taskPop.toggle} className="hover-surface flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium" title="Convert to task">
-                  <CheckSquare size={14} /> To task
-                </button>
-                <Popover open={taskPop.open} anchor={taskPop.anchor} onClose={taskPop.close} width={220}>
-                  <div className="text-faint px-2 py-1 text-[11px] font-semibold uppercase">Create task in</div>
-                  {lists.map((l) => (
-                    <MenuItem
-                      key={l.id}
-                      onClick={() => {
-                        const id = addTask({ listId: l.id, title: sel.text.split('\n')[0].slice(0, 80) || 'Whiteboard idea', description: `<p>From whiteboard “${board.title}”.</p>` })
-                        patchSel({ taskId: id })
-                        taskPop.close()
-                      }}
-                    >
-                      {l.name}
-                    </MenuItem>
-                  ))}
-                </Popover>
-              </>
-            )}
-            {sel.taskId && (
-              <button onClick={() => openTask(sel.taskId!)} className="hover-surface text-brand-600 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium">
-                <CheckSquare size={14} /> Open task
-              </button>
-            )}
-            <button
-              onClick={() => {
-                const copy = { ...sel, id: uid('b'), x: sel.x + 24, y: sel.y + 24, points: sel.points?.map(([x, y]) => [x + 24, y + 24] as [number, number]), taskId: null }
-                commit([...items, copy])
-                setSelected(copy.id)
-              }}
-              className="hover-surface text-muted rounded-md p-1.5"
-              title="Duplicate (⌘D)"
-            >
-              <Copy size={14} />
-            </button>
-            <button onClick={() => (commit(items.filter((i) => i.id !== sel.id)), setSelected(null))} className="hover-surface rounded-md p-1.5 text-red-500" title="Delete">
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
-
-        {/* Zoom */}
-        <div className="surface shadow-pop absolute right-3 bottom-3 flex items-center gap-0.5 rounded-xl p-1 text-xs">
-          <button onClick={() => zoomBy(0.8)} className="hover-surface rounded-lg p-1.5" aria-label="Zoom out">
-            <Minus size={15} />
-          </button>
-          <span className="w-12 text-center tabular-nums">{Math.round(view.zoom * 100)}%</span>
-          <button onClick={() => zoomBy(1.25)} className="hover-surface rounded-lg p-1.5" aria-label="Zoom in">
-            <Plus size={15} />
-          </button>
-          <button onClick={fit} className="hover-surface rounded-lg p-1.5" title="Fit to content">
-            <Maximize size={15} />
-          </button>
-        </div>
-        {items.length === 0 && (
-          <div className="text-muted pointer-events-none absolute inset-0 flex items-center justify-center text-sm">Pick a tool on the left — or press N for a sticky note — and click the canvas.</div>
+        ) : (
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {shown.map((w) => (
+                <div key={w.id} className="group border-app hover:border-brand-500 relative overflow-hidden rounded-xl border transition-colors">
+                  <Link to={`/app/whiteboards/${w.id}`} className="block">
+                    <div className="surface-subtle h-40 p-3" style={{ backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: '14px 14px' }}>
+                      <Thumb items={w.items} />
+                    </div>
+                    <div className="flex items-center gap-2 p-3">
+                      <Avatar userId={w.createdBy} size={20} />
+                      <span className="truncate text-sm font-semibold">{w.title}</span>
+                      {favorites.includes(w.id) && <Star size={12} className="shrink-0 fill-amber-400 text-amber-400" />}
+                      <span className="text-faint ml-auto shrink-0 text-xs">{timeAgo(w.updatedAt)}</span>
+                    </div>
+                  </Link>
+                  <div className="surface absolute top-2 right-2 hidden rounded-md shadow group-hover:block">
+                    <RowMenu w={w} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {shown.length === 0 && <p className="text-muted py-16 text-center text-sm">{q ? 'No whiteboards match.' : 'No whiteboards yet.'}</p>}
+          </>
         )}
       </div>
     </div>

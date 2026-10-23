@@ -114,6 +114,19 @@ func (fakeSigner) GenerateToken(c map[string]any) (string, error) {
 type noEmail struct{}
 
 func (noEmail) SendPasswordReset(context.Context, string, string) error { return nil }
+func (noEmail) SendWorkspaceInvite(context.Context, string, string, string, string) error {
+	return nil
+}
+
+type sentInvite struct{ to, inviter, workspace, token string }
+
+type inviteRecorder struct{ sent []sentInvite }
+
+func (*inviteRecorder) SendPasswordReset(context.Context, string, string) error { return nil }
+func (r *inviteRecorder) SendWorkspaceInvite(_ context.Context, to, inviter, workspace, token string) error {
+	r.sent = append(r.sent, sentInvite{to, inviter, workspace, token})
+	return nil
+}
 
 func newAuth() (*AuthService, *memTokens) {
 	toks := &memTokens{}
@@ -198,5 +211,29 @@ func TestChangePasswordRevokesSessions(t *testing.T) {
 	}
 	if _, _, err := a.Login(ctx, "ann@example.com", "battery-staple"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSendInviteOnlyGivesNewPeopleAPasswordLink(t *testing.T) {
+	ctx := context.Background()
+	users := &memUsers{byID: map[string]*domain.User{}}
+	rec := &inviteRecorder{}
+	a := NewAuthService(users, &memTokens{}, memResets{}, plainHasher{}, fakeSigner{}, rec, AuthConfig{AccessTTL: time.Minute, RefreshTTL: time.Hour, ResetTTL: time.Hour})
+	if _, _, err := a.Register(ctx, "ann@example.com", "Ann", "correct-horse"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := NewUserService(users).FindOrInvite(ctx, "bo@example.com", "Bo"); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []string{"ann@example.com", "bo@example.com"} {
+		if err := a.SendInvite(ctx, e, "Cy", "Acme"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(rec.sent) != 2 || rec.sent[0].token != "" || rec.sent[1].token == "" {
+		t.Fatalf("existing users get a log-in link, new ones a password link: %+v", rec.sent)
+	}
+	if rec.sent[1].inviter != "Cy" || rec.sent[1].workspace != "Acme" {
+		t.Fatalf("unexpected invite: %+v", rec.sent[1])
 	}
 }

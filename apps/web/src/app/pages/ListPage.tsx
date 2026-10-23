@@ -28,7 +28,9 @@ export default function ListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId])
 
-  if (!list || !space) return <Navigate to="/app/everything" replace />
+  // Wait for the workspace data before deciding the List is gone (a reload lands here first,
+  // and a workspace reload briefly empties the data while status stays ready).
+  if (!list || !space) return s.status === 'ready' && s.spaces.length ? <Navigate to="/app/everything" replace /> : null
 
   return (
     <div className="flex h-full flex-col">

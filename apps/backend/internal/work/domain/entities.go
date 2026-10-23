@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/indalyadav56/meetspace/backend/pkg/apperror"
@@ -221,6 +222,29 @@ type Form struct {
 	CreatedAt   time.Time   `json:"createdAt"`
 }
 
+// Timesheet is one person's week of tracked time and its approval state.
+type Timesheet struct {
+	UserID      string     `json:"userId"`
+	WeekStart   string     `json:"weekStart"` // Monday, YYYY-MM-DD
+	Status      string     `json:"status"`    // open | submitted | approved | rejected
+	Note        string     `json:"note"`
+	SubmittedAt *time.Time `json:"submittedAt"`
+	DecidedBy   *string    `json:"decidedBy"`
+	DecidedAt   *time.Time `json:"decidedAt"`
+}
+
+// MarshalJSON adds a stable id so clients can treat sheets like other records.
+func (t Timesheet) MarshalJSON() ([]byte, error) {
+	type plain Timesheet
+	return json.Marshal(struct {
+		ID string `json:"id"`
+		plain
+	}{t.UserID + ":" + t.WeekStart, plain(t)})
+}
+
+// Locked reports whether the week's entries can no longer be edited.
+func (t Timesheet) Locked() bool { return t.Status == "submitted" || t.Status == "approved" }
+
 var (
 	ErrProjectNotFound    = apperror.NotFound("project_not_found", "project not found")
 	ErrFolderNotFound     = apperror.NotFound("folder_not_found", "folder not found")
@@ -233,6 +257,7 @@ var (
 	ErrAutomationNotFound = apperror.NotFound("automation_not_found", "automation not found")
 	ErrFormNotFound       = apperror.NotFound("form_not_found", "form not found")
 	ErrNoTimer            = apperror.Conflict("no_timer", "no timer is running")
+	ErrTimesheetLocked    = apperror.Conflict("timesheet_locked", "this week’s timesheet is submitted or approved; reopen it to make changes")
 	ErrInvalidStatus      = apperror.Invalid("invalid_status", "status does not exist in this project")
 	ErrNotMember          = apperror.Invalid("not_a_member", "that person is not a member of this workspace")
 	ErrDependencyCycle    = apperror.Conflict("dependency_cycle", "these tasks already depend on each other")

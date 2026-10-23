@@ -11,7 +11,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN for b in server worker seed; do \
+RUN for b in server worker seed reindex; do \
       CGO_ENABLED=0 go build -ldflags="-w -s" -o /app/bin/$b ./cmd/$b || exit 1; \
     done
 

@@ -502,6 +502,10 @@ func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.PATCH("/automations/:id", h.updateAutomation)
 	rg.DELETE("/automations/:id", h.deleteAutomation)
 
+	rg.POST("/timesheets/submit", h.submitTimesheet)
+	rg.POST("/timesheets/decide", h.decideTimesheet)
+	rg.POST("/timesheets/reopen", h.reopenTimesheet)
+
 	rg.POST("/forms", h.createForm)
 	rg.PATCH("/forms/:id", h.updateForm)
 	rg.DELETE("/forms/:id", h.deleteForm)
@@ -511,4 +515,43 @@ func (h *Handler) Register(rg *gin.RouterGroup) {
 func (h *Handler) RegisterPublic(rg *gin.RouterGroup, submitLimit gin.HandlerFunc) {
 	rg.GET("/forms/:id", h.publicForm)
 	rg.POST("/forms/:id/submit", submitLimit, h.submitForm)
+}
+
+// ---- timesheets
+
+type submitSheetReq struct {
+	WeekStart string `json:"weekStart" binding:"required"`
+}
+
+type decideSheetReq struct {
+	UserID    string `json:"userId" binding:"required"`
+	WeekStart string `json:"weekStart" binding:"required"`
+	Approve   bool   `json:"approve"`
+	Note      string `json:"note" binding:"max=1000"`
+}
+
+type reopenSheetReq struct {
+	UserID    string `json:"userId" binding:"required"`
+	WeekStart string `json:"weekStart" binding:"required"`
+}
+
+func (h *Handler) submitTimesheet(c *gin.Context) {
+	if r, ok := bind[submitSheetReq](c); ok {
+		t, err := h.svc.SubmitTimesheet(c.Request.Context(), ws(c), actor(c), r.WeekStart)
+		respond(c, http.StatusOK, t, err)
+	}
+}
+
+func (h *Handler) decideTimesheet(c *gin.Context) {
+	if r, ok := bind[decideSheetReq](c); ok {
+		t, err := h.svc.DecideTimesheet(c.Request.Context(), ws(c), actor(c), r.UserID, r.WeekStart, r.Approve, r.Note)
+		respond(c, http.StatusOK, t, err)
+	}
+}
+
+func (h *Handler) reopenTimesheet(c *gin.Context) {
+	if r, ok := bind[reopenSheetReq](c); ok {
+		t, err := h.svc.ReopenTimesheet(c.Request.Context(), ws(c), actor(c), r.UserID, r.WeekStart)
+		respond(c, http.StatusOK, t, err)
+	}
 }

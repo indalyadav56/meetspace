@@ -1,0 +1,36 @@
+# Meetspace gateway: one entry point on port 80 for the whole stack.
+{
+	admin off
+}
+
+:80 {
+	encode zstd gzip
+
+	# REST API, realtime WebSocket and assistant streaming (SSE).
+	handle /api/* {
+		reverse_proxy backend:8080 {
+			flush_interval -1
+		}
+	}
+
+	# LiveKit signalling (WebSocket). Media still flows over UDP 50000-50100 / TCP 7881.
+	handle_path /livekit/* {
+		reverse_proxy livekit:7880
+	}
+
+	# MinIO web console (object storage admin).
+	handle_path /storage/* {
+		reverse_proxy minio:9001
+	}
+	redir /storage /storage/
+
+	# The web app (static files + SPA fallback).
+	handle {
+		reverse_proxy web:80
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

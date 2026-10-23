@@ -231,10 +231,10 @@ function FormBuilder({ form }: { form: Form }) {
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.active} onChange={(e) => up({ active: e.target.checked })} className="accent-brand-600 h-4 w-4" /> Accepting responses
             </label>
-            <p className="text-faint text-xs">Share link: {formLink(form.id)} — in this demo the link works in this browser, since data is stored locally.</p>
+            <p className="text-faint text-xs">Share link: {formLink(form.id)} — anyone with the link can respond, no sign-in needed.</p>
           </section>
         </div>
-        <div className="min-h-0 overflow-y-auto bg-slate-100 p-4 scroll-thin sm:p-8 dark:bg-slate-900">
+        <div className="min-h-0 overflow-y-auto bg-stone-100 p-4 scroll-thin sm:p-8 dark:bg-stone-900">
           <div className="text-faint mb-2 text-center text-xs font-semibold uppercase">Live preview</div>
           <div className="mx-auto max-w-xl">
             <FormView form={form} preview />

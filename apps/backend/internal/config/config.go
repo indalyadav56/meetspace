@@ -14,20 +14,26 @@ import (
 )
 
 type Config struct {
-	Server     Server        `mapstructure:"server"`
-	Postgres   Postgres      `mapstructure:"postgres"`
-	Redis      Redis         `mapstructure:"redis"`
-	LiveKit    LiveKit       `mapstructure:"livekit"`
-	AI         AI            `mapstructure:"ai"`
-	Media      Media         `mapstructure:"media"`
-	Web        Web           `mapstructure:"web"`
-	Logger     logger.Config `mapstructure:"logger"`
-	Admin      Admin         `mapstructure:"admin"`
-	JWT        JWT           `mapstructure:"jwt"`
-	AppEnv     string        `mapstructure:"app_env"`
-	Ollama     Ollama        `mapstructure:"ollama"`
-	Kafka      Kafka         `mapstructure:"kafka"`
-	ClickHouse ClickHouse    `mapstructure:"clickhouse"`
+	Server     Server     `mapstructure:"server"`
+	Postgres   Postgres   `mapstructure:"postgres"`
+	Redis      Redis      `mapstructure:"redis"`
+	LiveKit    LiveKit    `mapstructure:"livekit"`
+	AI         AI         `mapstructure:"ai"`
+	Media      Media      `mapstructure:"media"`
+	MinIO      MinIO      `mapstructure:"minio"`
+	OpenSearch OpenSearch `mapstructure:"opensearch"`
+	Web        Web        `mapstructure:"web"`
+	Resend     Resend     `mapstructure:"resend"`
+	// Integrations configures third-party connections such as GitHub.
+	Integrations Integrations  `mapstructure:"integrations"`
+	SMTP         SMTP          `mapstructure:"smtp"`
+	Logger       logger.Config `mapstructure:"logger"`
+	Admin        Admin         `mapstructure:"admin"`
+	JWT          JWT           `mapstructure:"jwt"`
+	AppEnv       string        `mapstructure:"app_env"`
+	Ollama       Ollama        `mapstructure:"ollama"`
+	Kafka        Kafka         `mapstructure:"kafka"`
+	ClickHouse   ClickHouse    `mapstructure:"clickhouse"`
 }
 
 type ClickHouse struct {
@@ -90,8 +96,29 @@ type AI struct {
 }
 
 type Media struct {
+	// Storage is where clip media lives: "minio" (default) or "filesystem" (Dir).
+	Storage     string `mapstructure:"storage"`
 	Dir         string `mapstructure:"dir"`
 	MaxUploadMB int64  `mapstructure:"max_upload_mb"`
+}
+
+// OpenSearch powers workspace search. With no URLs, search is disabled.
+type OpenSearch struct {
+	URLs     []string `mapstructure:"urls"`
+	Username string   `mapstructure:"username"`
+	Password string   `mapstructure:"password"`
+	Index    string   `mapstructure:"index"`
+}
+
+// MinIO is the S3-compatible object store for media.
+type MinIO struct {
+	// Endpoint is host:port without a scheme, e.g. "localhost:9000".
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	Bucket    string `mapstructure:"bucket"`
+	UseSSL    bool   `mapstructure:"use_ssl"`
+	Region    string `mapstructure:"region"`
 }
 
 type Web struct {
@@ -129,6 +156,23 @@ type Server struct {
 	IdleTimeout  time.Duration `mapstructure:"idle_timeout"`
 }
 
+// Integrations holds settings shared by third-party integrations.
+type Integrations struct {
+	// EncryptionKey encrypts stored access tokens (any long random string).
+	EncryptionKey string `mapstructure:"encryption_key"`
+}
+
+// Resend sends transactional email (password resets, invites) through the
+// Resend API. It takes precedence over SMTP when APIKey is set.
+type Resend struct {
+	APIKey string `mapstructure:"api_key"`
+	// From must use a domain verified in Resend; onboarding@resend.dev works
+	// for testing but only delivers to the Resend account's own address.
+	From string `mapstructure:"from"`
+}
+
+// SMTP is an alternative to Resend for any SMTP provider. With neither
+// configured, emails are written to the log instead.
 type SMTP struct {
 	Host     string `mapstructure:"host"`
 	Port     int    `mapstructure:"port"`

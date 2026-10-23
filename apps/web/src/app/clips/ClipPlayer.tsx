@@ -31,7 +31,7 @@ export default function ClipPlayer({ clipId, compact, className }: { clipId: str
   return (
     <div className={cn('overflow-hidden rounded-lg bg-black', compact ? 'max-w-sm' : '', className)}>
       {missing ? (
-        <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-slate-800 p-4 text-center text-xs text-white/70">
+        <div className="flex aspect-video flex-col items-center justify-center gap-2 bg-stone-800 p-4 text-center text-xs text-white/70">
           {audioOnly ? <Mic size={22} /> : <Film size={22} />}
           This recording couldn’t be loaded.
         </div>

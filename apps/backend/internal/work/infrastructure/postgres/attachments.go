@@ -383,3 +383,56 @@ func (r *Repository) DeleteForm(ctx context.Context, ws, id string) error {
 func (r *Repository) IncrementSubmissions(ctx context.Context, ws, id string) (*domain.Form, error) {
 	return scanForm(r.db.QueryRowContext(ctx, `UPDATE work.forms SET submissions = submissions + 1 WHERE workspace_id=$1 AND id=$2 RETURNING `+formCols, ws, id))
 }
+
+// ---- timesheets
+
+const timesheetCols = `user_id, to_char(week_start, 'YYYY-MM-DD'), status, note, submitted_at, decided_by, decided_at`
+
+func scanTimesheet(r row) (*domain.Timesheet, error) {
+	var t domain.Timesheet
+	var decided sql.NullString
+	if err := r.Scan(&t.UserID, &t.WeekStart, &t.Status, &t.Note, &t.SubmittedAt, &decided, &t.DecidedAt); err != nil {
+		return nil, err
+	}
+	if decided.Valid {
+		t.DecidedBy = &decided.String
+	}
+	return &t, nil
+}
+
+func (r *Repository) GetTimesheet(ctx context.Context, ws, userID, weekStart string) (*domain.Timesheet, error) {
+	t, err := scanTimesheet(r.db.QueryRowContext(ctx, `SELECT `+timesheetCols+` FROM work.timesheets WHERE workspace_id=$1 AND user_id=$2 AND week_start=$3`, ws, userID, weekStart))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return t, err
+}
+
+func (r *Repository) SaveTimesheet(ctx context.Context, ws string, t *domain.Timesheet) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO work.timesheets (workspace_id, user_id, week_start, status, note, submitted_at, decided_by, decided_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
+		ON CONFLICT (workspace_id, user_id, week_start) DO UPDATE SET
+			status=EXCLUDED.status, note=EXCLUDED.note, submitted_at=EXCLUDED.submitted_at,
+			decided_by=EXCLUDED.decided_by, decided_at=EXCLUDED.decided_at, updated_at=now()`,
+		ws, t.UserID, t.WeekStart, t.Status, t.Note, t.SubmittedAt, t.DecidedBy, t.DecidedAt)
+	return err
+}
+
+// ListTimesheets returns the last year of sheets.
+func (r *Repository) ListTimesheets(ctx context.Context, ws string) ([]domain.Timesheet, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT `+timesheetCols+` FROM work.timesheets WHERE workspace_id=$1 AND week_start > now() - interval '1 year' ORDER BY week_start DESC`, ws)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Timesheet{}
+	for rows.Next() {
+		t, err := scanTimesheet(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *t)
+	}
+	return out, rows.Err()
+}

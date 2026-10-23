@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryState } from '../../lib/useQueryState'
 import { format, parseISO } from 'date-fns'
 import { ChevronDown, ChevronRight, Plus, Target as TargetIcon, Trash2, Trophy, X } from 'lucide-react'
 import { targetProgress, useStore } from '../../store/useStore'
@@ -33,7 +34,9 @@ function Ring({ pct, color, size = 44 }: { pct: number; color: string; size?: nu
 export default function GoalsPage() {
   const { goals, addGoal } = useStore()
   const progress = useGoalProgress()
-  const [open, setOpen] = useState<string | null>(null)
+  const [goalParam, setGoalParam] = useQueryState<string>('goal', '')
+  const open = goalParam || null
+  const setOpen = (id: string | null) => setGoalParam(id ?? '')
   const folders = [...new Set(goals.map((g) => g.folder))]
 
   return (

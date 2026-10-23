@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { ChevronRight, FileText, Folder as FolderIcon, LayoutTemplate, Layers, List as ListIcon, MoreHorizontal, Plus, Star } from 'lucide-react'
+import { ChevronRight, Folder as FolderIcon, LayoutTemplate, Layers, List as ListIcon, MoreHorizontal, Plus, Star } from 'lucide-react'
 import { TemplatePicker } from './components/Dialogs'
 import { useStore } from '../store/useStore'
 import type { ID } from '../store/types'
@@ -15,7 +15,7 @@ function SpaceBadge({ name, color, size = 18 }: { name: string; color: string; s
   )
 }
 
-const rowCls = ({ isActive }: { isActive: boolean }) =>
+export const rowCls = ({ isActive }: { isActive: boolean }) =>
   cn('group flex h-8 items-center gap-2 rounded-md px-2 text-[13px]', isActive ? 'bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100 font-medium' : 'hover-surface text-app')
 
 function ItemMenu({ onRename, onDelete, extra }: { onRename: () => void; onDelete: () => void; extra?: React.ReactNode }) {
@@ -43,7 +43,8 @@ function ItemMenu({ onRename, onDelete, extra }: { onRename: () => void; onDelet
   )
 }
 
-export default function Sidebar() {
+/** The Projects section: favorites and the project → folder → list tree. */
+export function ProjectsSidebar() {
   const s = useStore()
   const nav = useNavigate()
   const [closed, setClosed] = useState<Record<ID, boolean>>({})
@@ -66,7 +67,7 @@ export default function Sidebar() {
     .filter(Boolean) as { id: ID; name: string; to: string; icon: React.ReactNode }[]
 
   return (
-    <aside className="surface-subtle text-app flex h-full w-full min-w-0 flex-col overflow-y-auto px-2 pb-4 scroll-thin md:w-64">
+    <>
       {favItems.length > 0 && (
         <section className="mt-2">
           <div className="text-faint px-2 py-1 text-[11px] font-semibold uppercase tracking-wide">Favorites</div>
@@ -82,12 +83,12 @@ export default function Sidebar() {
 
       <section className="mt-3">
         <div className="flex items-center px-2 py-1">
-          <span className="text-faint text-[11px] font-semibold uppercase tracking-wide">Projects</span>
+          <span className="text-faint text-[11px] font-semibold uppercase tracking-wide">Spaces</span>
           <button
             className="text-muted hover-surface ml-auto rounded p-0.5"
-            aria-label="New project"
+            aria-label="New space"
             onClick={() => {
-              const name = prompt('Name your new project')
+              const name = prompt('Name your new space')
               if (name) nav(`/app/space/${s.addSpace(name)}`)
             }}
           >
@@ -118,7 +119,7 @@ export default function Sidebar() {
                 <span className="truncate">{sp.name}</span>
                 <ItemMenu
                   onRename={() => {
-                    const n = prompt('Rename project', sp.name)
+                    const n = prompt('Rename space', sp.name)
                     if (n) s.updateSpace(sp.id, { name: n })
                   }}
                   onDelete={() => confirm(`Delete “${sp.name}” and everything in it?`) && (s.deleteSpace(sp.id), nav('/app/everything'))}
@@ -188,38 +189,17 @@ export default function Sidebar() {
         })}
         <button
           onClick={() => {
-            const name = prompt('Name your new project')
+            const name = prompt('Name your new space')
             if (name) nav(`/app/space/${s.addSpace(name)}`)
           }}
           className="text-muted hover-surface flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px]"
         >
-          <Plus size={14} /> New project
+          <Plus size={14} /> New space
         </button>
       </section>
 
-      <section className="mt-3">
-        <div className="flex items-center px-2 py-1">
-          <span className="text-faint text-[11px] font-semibold uppercase tracking-wide">Docs</span>
-          <button
-            className="text-muted hover-surface ml-auto rounded p-0.5"
-            aria-label="New doc"
-            onClick={() => nav(`/app/docs/${s.addDoc(null)}`)}
-          >
-            <Plus size={14} />
-          </button>
-        </div>
-        {s.docs.slice(0, 6).map((d) => (
-          <NavLink key={d.id} to={`/app/docs/${d.id}`} className={rowCls}>
-            <span className="text-xs">{d.emoji}</span>
-            <span className="truncate">{d.title || 'Untitled'}</span>
-          </NavLink>
-        ))}
-        <NavLink to="/app/docs" end className={rowCls}>
-          <FileText size={14} className="text-muted" /> All docs
-        </NavLink>
-      </section>
       {templateSpace && <TemplatePicker spaceId={templateSpace} open onClose={() => setTemplateSpace(null)} />}
-    </aside>
+    </>
   )
 }
 

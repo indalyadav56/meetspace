@@ -80,6 +80,10 @@ func (s *Service) Snapshot(ctx context.Context, ws, userID string) (map[string]a
 	if err != nil {
 		return nil, err
 	}
+	sheets, err := s.repo.ListTimesheets(ctx, ws)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"projects":    nonNil(st.Projects),
 		"folders":     nonNil(st.Folders),
@@ -93,6 +97,7 @@ func (s *Service) Snapshot(ctx context.Context, ws, userID string) (map[string]a
 		"sprints":     nonNil(st.Sprints),
 		"automations": nonNil(st.Automations),
 		"forms":       nonNil(st.Forms),
+		"timesheets":  sheets,
 	}, nil
 }
 

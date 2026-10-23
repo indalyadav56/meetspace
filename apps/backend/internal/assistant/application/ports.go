@@ -37,6 +37,8 @@ type RunRequest struct {
 	Message     string
 	// Context describes what the user is looking at (date, open task, page).
 	Context string
+	// AgentID optionally runs the turn as a saved agent with its instructions.
+	AgentID string
 }
 
 // Agent runs one conversational turn and streams events through emit.

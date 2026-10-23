@@ -44,7 +44,7 @@ export function TemplatePicker({ spaceId, open, onClose }: { spaceId: ID; open: 
           <ul className="border-app divide-y divide-[var(--border)] rounded-lg border text-sm">
             {tpl.tasks.map((t) => (
               <li key={t.title} className="flex items-center gap-2 px-3 py-2">
-                <span className={cn('h-3 w-3 rounded-full border-2', t.status === 'done' ? 'border-emerald-500 bg-emerald-500' : t.status === 'active' ? 'border-blue-500' : 'border-slate-400')} />
+                <span className={cn('h-3 w-3 rounded-full border-2', t.status === 'done' ? 'border-emerald-500 bg-emerald-500' : t.status === 'active' ? 'border-blue-500' : 'border-stone-400')} />
                 {t.title}
                 {t.subtasks && <span className="text-faint ml-auto text-xs">+{t.subtasks.length} subtasks</span>}
               </li>

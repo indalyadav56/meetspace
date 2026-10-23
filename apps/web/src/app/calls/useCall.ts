@@ -185,7 +185,7 @@ function syntheticVideo(userId: ID): MediaStreamTrack {
     g.fillStyle = '#1f2128'
     g.fillRect(0, 0, 640, 360)
     const r = 70 + Math.sin(t / 8) * 4
-    g.fillStyle = user?.color ?? '#4f46e5'
+    g.fillStyle = user?.color ?? '#0b7f71'
     g.beginPath()
     g.arc(320, 180, r, 0, Math.PI * 2)
     g.fill()
@@ -546,7 +546,7 @@ function startRecorder(): boolean {
         g.drawImage(v, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh)
       } else {
         const user = useStore.getState().users.find((u) => u.id === t.userId)
-        g.fillStyle = user?.color ?? '#4f46e5'
+        g.fillStyle = user?.color ?? '#0b7f71'
         g.beginPath()
         g.arc(x + w / 2, y + h / 2, Math.min(w, h) / 6, 0, Math.PI * 2)
         g.fill()

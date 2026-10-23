@@ -6,20 +6,26 @@ import { useStore } from '../../store/useStore'
 import { useShallow } from 'zustand/react/shallow'
 import { PRIORITIES, cn, friendlyDate, initials, isOverdue, priorityMeta, tagColor } from '../../lib/utils'
 
+/** Meetspace mark: two arches forming an "m" (people meeting) with a coral live dot. */
 export function Logo({ size = 28, withText = true, className }: { size?: number; withText?: boolean; className?: string }) {
   return (
-    <span className={cn('inline-flex items-center gap-2 font-bold tracking-tight', className)}>
-      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
+    <span className={cn('inline-flex items-center gap-2 font-bold', className)}>
+      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden className="shrink-0">
         <defs>
-          <linearGradient id="tl-g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#14b8a6" />
-            <stop offset="1" stopColor="#4f46e5" />
+          <linearGradient id="ms-tile" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#149c89" />
+            <stop offset="1" stopColor="#0c665c" />
           </linearGradient>
         </defs>
-        <rect width="32" height="32" rx="8" fill="url(#tl-g)" />
-        <path d="M8 11h16M8 16h11M8 21h7" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
+        <rect width="32" height="32" rx="9.5" fill="url(#ms-tile)" />
+        <path d="M8.5 23v-7.25a3.75 3.75 0 0 1 7.5 0V23m0-7.25a3.75 3.75 0 0 1 7.5 0V23" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="24.25" cy="8.25" r="2.75" fill="#fd7f4f" />
       </svg>
-      {withText && <span style={{ fontSize: size * 0.72 }}>Meetspace</span>}
+      {withText && (
+        <span className="font-display tracking-tight" style={{ fontSize: size * 0.74 }}>
+          meetspace
+        </span>
+      )}
     </span>
   )
 }
@@ -60,6 +66,7 @@ export function Popover({
   anchor,
   children,
   align = 'start',
+  side = 'bottom',
   width = 220,
 }: {
   open: boolean
@@ -67,6 +74,8 @@ export function Popover({
   anchor: HTMLElement | null
   children: ReactNode
   align?: 'start' | 'end'
+  /** bottom: below the anchor (flips above if needed); right: beside it, e.g. from the rail. */
+  side?: 'bottom' | 'right'
   width?: number
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -76,12 +85,16 @@ export function Popover({
     if (!open || !anchor) return
     const r = anchor.getBoundingClientRect()
     const h = ref.current?.offsetHeight ?? 240
+    if (side === 'right') {
+      setPos({ top: Math.min(Math.max(8, r.top), window.innerHeight - h - 8), left: Math.min(r.right + 8, window.innerWidth - width - 8) })
+      return
+    }
     let top = r.bottom + 4
     if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4)
     let left = align === 'end' ? r.right - width : r.left
     left = Math.min(Math.max(8, left), window.innerWidth - width - 8)
     setPos({ top, left })
-  }, [open, anchor, align, width])
+  }, [open, anchor, align, side, width])
 
   useEffect(() => {
     if (!open) return

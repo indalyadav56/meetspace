@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { AtSign, Bell, BellRing, CalendarClock, CheckCheck, CircleDot, MessageSquare, RotateCcw, UserPlus, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useQueryState } from '../../lib/useQueryState'
+import { AtSign, Bell, BellRing, CalendarClock, CheckCheck, CircleDot, MessageSquare, RotateCcw, Timer, UserPlus, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { NotificationKind } from '../../store/types'
 import { Avatar } from '../components/ui'
@@ -12,13 +13,15 @@ const kindIcon: Record<NotificationKind, typeof Bell> = {
   status: CircleDot,
   mention: AtSign,
   due: CalendarClock,
+  timesheet: Timer,
 }
 
 type Tab = 'important' | 'other' | 'cleared'
 
 export default function Inbox() {
+  const nav = useNavigate()
   const s = useStore()
-  const [tab, setTab] = useState<Tab>('important')
+  const [tab, setTab] = useQueryState<Tab>('tab', 'important')
   const items = s.notifications
     .filter((n) => (tab === 'cleared' ? n.cleared : !n.cleared && (tab === 'important' ? n.important : !n.important)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -62,6 +65,7 @@ export default function Inbox() {
               onClick={() => {
                 s.markRead(n.id)
                 if (task) s.openTask(task.id)
+                else if (n.kind === 'timesheet') nav(`/app/timesheets?tab=${n.text.includes('submitted their') ? 'approvals' : 'mine'}`)
               }}
               className={cn('group border-app hover-surface flex cursor-pointer items-start gap-3 border-b px-4 py-3', !n.read && 'bg-brand-50/50 dark:bg-brand-600/10')}
             >

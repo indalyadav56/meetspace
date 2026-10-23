@@ -21,7 +21,7 @@ export default function BulkBar({ ids, onClear }: { ids: ID[]; onClear: () => vo
   const btn = 'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium hover:bg-white/10'
 
   return (
-    <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-slate-900 px-2 py-1.5 text-white shadow-2xl">
+    <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-stone-900 px-2 py-1.5 text-white shadow-2xl">
       <span className="px-2 text-[13px] font-semibold">{ids.length} selected</span>
       <span className="mx-1 h-5 border-l border-white/20" />
       {sameSpace && space && (

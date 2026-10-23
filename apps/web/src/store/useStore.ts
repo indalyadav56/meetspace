@@ -24,6 +24,7 @@ import type {
   User,
   ViewKind,
   Whiteboard,
+  Team,
   Workspace,
   Meeting,
   CallLog,
@@ -32,22 +33,31 @@ import type {
   FormField,
   Sprint,
   Reminder,
+  Timesheet,
   MemberRole,
   Member,
 } from './types'
 import { api, ApiError, newId, onWriteError, session, type Tokens } from '../api/client'
 import { RealtimeConnection, emitRealtime, type RealtimeEvent } from '../api/realtime'
 import { SPACE_COLORS, toISODate } from '../lib/utils'
+import { LIST_TEMPLATES } from './templates'
+import { brainstormItems, kickoffStart, welcomeDoc, type StarterTool } from './onboarding'
 
 export interface Filters {
   search: string
   assignees: ID[]
   priorities: string[]
   showClosed: boolean
-  sort: 'manual' | 'due' | 'priority' | 'title'
+  sort: SortKey
+  sortDir: 'asc' | 'desc'
+  tags: string[]
+  due: DueFilter
 }
 
-export const emptyFilters: Filters = { search: '', assignees: [], priorities: [], showClosed: true, sort: 'manual' }
+export type SortKey = 'manual' | 'due' | 'priority' | 'title' | 'start' | 'created' | 'updated' | 'estimate' | 'points'
+export type DueFilter = '' | 'overdue' | 'today' | 'week' | 'none'
+
+export const emptyFilters: Filters = { search: '', assignees: [], priorities: [], showClosed: true, sort: 'manual', sortDir: 'asc', tags: [], due: '' }
 
 /** Comments and activity written by automations use this pseudo-user id. */
 export const BOT = 'bot'
@@ -56,6 +66,7 @@ export const BOT = 'bot'
 const DATA_KEYS = [
   'spaces', 'folders', 'lists', 'tasks', 'comments', 'activity', 'docs', 'notifications', 'fields', 'timeEntries',
   'channels', 'messages', 'whiteboards', 'goals', 'automations', 'meetings', 'callLogs', 'clips', 'forms', 'sprints', 'reminders',
+  'timesheets', 'teams',
 ] as const
 type DataKey = (typeof DATA_KEYS)[number]
 
@@ -95,6 +106,8 @@ interface State {
   forms: Form[]
   sprints: Sprint[]
   reminders: Reminder[]
+  timesheets: Timesheet[]
+  teams: Team[]
   spaces: Space[]
   folders: Folder[]
   lists: List[]
@@ -122,7 +135,10 @@ interface State {
   openTaskId: ID | null
 
   signIn: (email: string, password: string) => Promise<void>
+  /** Creates the account and signs in, without loading a workspace (onboarding creates it next). */
   signUp: (name: string, email: string, password: string) => Promise<void>
+  /** Final onboarding step: creates the user's first workspace, invites teammates and adds starter Lists. */
+  setupWorkspace: (opts: { name: string; color: string; invites: string[]; templates: string[]; tools: StarterTool[] }) => Promise<void>
   bootstrap: () => Promise<void>
   reload: () => Promise<void>
   toast: (text: string, tone?: Toast['tone']) => void
@@ -162,6 +178,10 @@ interface State {
   addReminder: (r: Omit<Reminder, 'id' | 'done' | 'notified' | 'createdAt'>) => ID
   updateReminder: (id: ID, patch: Partial<Reminder>) => void
   deleteReminder: (id: ID) => void
+
+  submitTimesheet: (weekStart: string) => void
+  decideTimesheet: (userId: ID, weekStart: string, approve: boolean, note?: string) => void
+  reopenTimesheet: (userId: ID, weekStart: string) => void
 
   toggleWatcher: (taskId: ID, userId: ID) => void
   updateComment: (id: ID, patch: Partial<Comment>) => void
@@ -224,6 +244,11 @@ interface State {
   messageToTask: (messageId: ID, listId: ID) => ID
 
   addWhiteboard: () => ID
+  addTeam: (input: Partial<Team> & { name: string }) => ID
+  updateTeam: (id: ID, patch: Partial<Team>) => void
+  deleteTeam: (id: ID) => void
+  /** Title and manager for the org chart; resolves false (and toasts) when the server refuses. */
+  setMemberProfile: (userId: ID, patch: { title?: string; managerId?: ID | null }) => Promise<boolean>
   updateWhiteboard: (id: ID, patch: Partial<Whiteboard>) => void
   setBoardItems: (id: ID, items: BoardItem[]) => void
   deleteWhiteboard: (id: ID) => void
@@ -250,7 +275,7 @@ function emptyData(): Pick<State, DataKey | 'timer' | 'lastRead' | 'presence'> {
   return {
     spaces: [], folders: [], lists: [], tasks: [], comments: [], activity: [], docs: [], notifications: [], fields: [], timeEntries: [],
     channels: [], messages: [], whiteboards: [], goals: [], automations: [], meetings: [], callLogs: [], clips: [], forms: [], sprints: [],
-    reminders: [], timer: null, lastRead: {}, presence: [],
+    reminders: [], timesheets: [], teams: [], timer: null, lastRead: {}, presence: [],
   }
 }
 
@@ -435,7 +460,7 @@ export const useStore = create<State>()(
                       members:
                         e.op === 'delete'
                           ? x.members.filter((m) => m.userId !== p.userId)
-                          : [...x.members.filter((m) => m.userId !== p.userId), { userId: p.userId, role: p.role, invited: p.invited } as Member],
+                          : [...x.members.filter((m) => m.userId !== p.userId), { userId: p.userId, role: p.role, invited: p.invited, title: p.title, managerId: p.managerId } as Member],
                     },
               ),
             }))
@@ -496,15 +521,18 @@ export const useStore = create<State>()(
 
       const enterWorkspace = async (id: ID) => {
         const s = get()
-        set({ ...emptyData(), currentWorkspaceId: id, openTaskId: null, filters: emptyFilters, ...(s.prefsByWorkspace[id] ?? emptyPrefs()) })
+        // Re-entering the same workspace (a reload) keeps the persisted favorites/recents; the
+        // per-workspace copy is only written when switching away, so it may be stale.
+        const prefs = id === s.currentWorkspaceId ? { favorites: s.favorites, recents: s.recents, listViews: s.listViews } : (s.prefsByWorkspace[id] ?? emptyPrefs())
+        set({ ...emptyData(), currentWorkspaceId: id, openTaskId: null, filters: emptyFilters, ...prefs })
         await loadWorkspace(id)
         connect(id)
       }
 
-      const startSession = async (t: Tokens, user: User) => {
+      const startSession = async (t: Tokens, user: User, load = true) => {
         session.set({ accessToken: t.accessToken, refreshToken: t.refreshToken })
         set({ signedIn: true, currentUserId: user.id, users: [user] })
-        await get().bootstrap()
+        if (load) await get().bootstrap()
       }
 
       return {
@@ -533,7 +561,51 @@ export const useStore = create<State>()(
         },
         signUp: async (name, email, password) => {
           const r = await api.raw<{ user: User; tokens: Tokens }>('POST', '/auth/register', { body: { fullName: name, email, password }, anonymous: true })
-          await startSession(r.tokens, r.user)
+          await startSession(r.tokens, r.user, false)
+        },
+        setupWorkspace: async ({ name, color, invites, templates, tools }) => {
+          const ws = await api.post<Workspace>('/workspaces', { id: newId(), name, color })
+          set({ currentWorkspaceId: ws.id })
+          // Invites that fail (e.g. a typo'd address) shouldn't block getting into the app.
+          await Promise.allSettled(invites.map((email) => api.post(`/workspaces/${ws.id}/members`, { email, role: 'member' })))
+          await get().bootstrap()
+          const s = get()
+          const space = s.spaces[0]
+          if (!space) return
+          const listIds = templates.map((key) => s.applyTemplate(space.id, key, LIST_TEMPLATES.find((t) => t.key === key)?.name ?? key))
+          const listId = listIds[0] ?? s.lists.find((l) => l.spaceId === space.id)?.id
+          const has = (t: StarterTool) => tools.includes(t)
+
+          // Starter content for each tool picked during onboarding.
+          if (has('docs')) {
+            const doc = s.addDoc(space.id)
+            s.updateDoc(doc, { title: `Welcome to ${name}`, emoji: '👋', content: welcomeDoc(name) })
+          }
+          if (has('chat')) s.addChannel('announcements', 'Important updates for everyone')
+          if (has('calls')) {
+            const members = get().workspaces.find((w) => w.id === ws.id)?.members.map((m) => m.userId) ?? [me()]
+            const general = get().channels.find((c) => c.kind === 'channel' && c.name === 'general')
+            s.addMeeting({ title: 'Team kickoff', start: kickoffStart(), durationMin: 30, attendees: members, kind: 'video', agenda: 'Introductions\nHow we’ll work together\nFirst priorities', channelId: general?.id ?? null, taskId: null })
+          }
+          if (has('whiteboards')) {
+            const board = s.addWhiteboard()
+            s.updateWhiteboard(board, { title: 'Brainstorm', items: brainstormItems() })
+          }
+          if (has('goals')) {
+            const goal = s.addGoal()
+            s.updateGoal(goal, {
+              name: 'Get our first project done',
+              description: 'Tracks how many tasks in our first List are complete.',
+              targets: listId ? [{ id: newId(), name: 'Tasks completed', kind: 'tasks', start: 0, current: 0, target: 0, unit: '', listId }] : [],
+            })
+          }
+          if (has('forms') && listId) {
+            const form = s.addForm(listId)
+            s.updateForm(form, { title: 'Request intake', description: 'Tell us what you need and we’ll turn it into a task.' })
+          }
+          if (has('sprints')) s.startSprint(s.addSprint(space.id))
+          if (has('automations'))
+            s.addAutomation({ spaceId: space.id, name: 'Assign new tasks to me', enabled: true, trigger: { type: 'task_created', value: '' }, actions: [{ type: 'add_assignee', value: me() }] })
         },
         bootstrap: async () => {
           if (!session.signedIn) return
@@ -669,7 +741,7 @@ export const useStore = create<State>()(
             { id: 'q1', label: 'Title', kind: 'short', required: true, options: [], target: 'title', help: '' },
             { id: 'q2', label: 'Details', kind: 'long', required: false, options: [], target: 'description', help: '' },
           ]
-          upsert('forms', { id, listId, title: 'Untitled form', description: '', color: '#4f46e5', fields, assignTo: [], submitText: 'Submit', thanksText: 'Thanks — your response was recorded.', active: true, submissions: 0, createdAt: now() })
+          upsert('forms', { id, listId, title: 'Untitled form', description: '', color: '#0b7f71', fields, assignTo: [], submitText: 'Submit', thanksText: 'Thanks — your response was recorded.', active: true, submissions: 0, createdAt: now() })
           save('forms', api.post<Form>(w('/forms'), { id, listId }))
           return id
         },
@@ -740,6 +812,21 @@ export const useStore = create<State>()(
         deleteReminder: (id) => {
           removeLocal('reminders', id)
           void api.del(w(`/reminders/${id}`))
+        },
+
+        submitTimesheet: (weekStart) => {
+          const id = `${me()}:${weekStart}`
+          const cur = get().timesheets.find((t) => t.id === id)
+          upsert('timesheets', { id, userId: me(), weekStart, note: '', decidedBy: null, decidedAt: null, ...cur, status: 'submitted', submittedAt: now() })
+          save('timesheets', api.post<Timesheet>(w('/timesheets/submit'), { weekStart }))
+        },
+        decideTimesheet: (userId, weekStart, approve, note = '') => {
+          patchLocal('timesheets', `${userId}:${weekStart}`, { status: approve ? 'approved' : 'rejected', note, decidedBy: me(), decidedAt: now() })
+          save('timesheets', api.post<Timesheet>(w('/timesheets/decide'), { userId, weekStart, approve, note }))
+        },
+        reopenTimesheet: (userId, weekStart) => {
+          patchLocal('timesheets', `${userId}:${weekStart}`, { status: 'open', submittedAt: null, decidedBy: null, decidedAt: null })
+          save('timesheets', api.post<Timesheet>(w('/timesheets/reopen'), { userId, weekStart }))
         },
 
         toggleWatcher: (taskId, userId) => {
@@ -1076,6 +1163,35 @@ export const useStore = create<State>()(
           void api.del(w(`/whiteboards/${id}`))
         },
 
+        addTeam: (input) => {
+          const id = newId()
+          const team: Team = { id, color: '#0b7f71', description: '', leadId: null, members: [], createdBy: me(), createdAt: now(), updatedAt: now(), ...input }
+          upsert('teams', team)
+          save('teams', api.post<Team>(w('/teams'), pick(team, ['id', 'name', 'color', 'description', 'leadId', 'members'])))
+          return id
+        },
+        updateTeam: (id, patch) => {
+          const cur = get().teams.find((t) => t.id === id)
+          if (!cur) return
+          const next = { ...cur, ...patch, updatedAt: now() }
+          patchLocal('teams', id, next)
+          save('teams', api.patch<Team>(w(`/teams/${id}`), pick(next, ['name', 'color', 'description', 'leadId', 'members'])), undefined, id)
+        },
+        deleteTeam: (id) => {
+          removeLocal('teams', id)
+          void api.del(w(`/teams/${id}`))
+        },
+        setMemberProfile: async (userId, patch) => {
+          try {
+            const m = await api.patch<Member>(w(`/members/${userId}/profile`), patch)
+            set((s) => ({ workspaces: s.workspaces.map((x) => (x.id !== wid() ? x : { ...x, members: x.members.map((y) => (y.userId === userId ? { ...y, ...m } : y)) })) }))
+            return true
+          } catch (e) {
+            get().toast(e instanceof Error ? e.message : 'Could not update that person', 'error')
+            return false
+          }
+        },
+
         addGoal: () => {
           const id = newId()
           upsert('goals', { id, name: 'New goal', description: '', color: SPACE_COLORS[get().goals.length % SPACE_COLORS.length], ownerId: me(), dueDate: null, folder: 'Goals', targets: [] })
@@ -1184,22 +1300,45 @@ export function statusOf(task: Task, spaces: Space[], lists: List[]) {
 }
 
 export function applyFilters(tasks: Task[], f: Filters, isClosed: (t: Task) => boolean) {
+  const today = new Date().toISOString().slice(0, 10)
+  const week = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
   let out = tasks.filter((t) => {
-    if (f.search && !t.title.toLowerCase().includes(f.search.toLowerCase())) return false
+    if (f.search && !t.title.toLowerCase().includes(f.search.toLowerCase()) && !`ms-${t.key}`.includes(f.search.toLowerCase())) return false
     if (f.assignees.length && !t.assignees.some((a) => f.assignees.includes(a))) return false
     if (f.priorities.length && !f.priorities.includes(t.priority ?? 'none')) return false
+    if (f.tags?.length && !t.tags.some((g) => f.tags.includes(g))) return false
+    if (f.due) {
+      const d = t.dueDate?.slice(0, 10) ?? null
+      if (f.due === 'none' ? d !== null : !d) return false
+      if (f.due === 'overdue' && !(d! < today && !isClosed(t))) return false
+      if (f.due === 'today' && d !== today) return false
+      if (f.due === 'week' && !(d! >= today && d! <= week)) return false
+    }
     if (!f.showClosed && isClosed(t)) return false
     return true
   })
   const rank: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3, none: 4 }
+  const last = (v: string | null) => v ?? '9999'
+  const num = (v: number | null) => v ?? Number.MAX_SAFE_INTEGER
+  const dir = f.sortDir === 'desc' ? -1 : 1
   out = [...out].sort((a, b) => {
     switch (f.sort) {
       case 'due':
-        return (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')
+        return dir * last(a.dueDate).localeCompare(last(b.dueDate))
+      case 'start':
+        return dir * last(a.startDate).localeCompare(last(b.startDate))
       case 'priority':
-        return rank[a.priority ?? 'none'] - rank[b.priority ?? 'none']
+        return dir * (rank[a.priority ?? 'none'] - rank[b.priority ?? 'none'])
       case 'title':
-        return a.title.localeCompare(b.title)
+        return dir * a.title.localeCompare(b.title)
+      case 'created':
+        return dir * a.createdAt.localeCompare(b.createdAt)
+      case 'updated':
+        return dir * a.updatedAt.localeCompare(b.updatedAt)
+      case 'estimate':
+        return dir * (num(a.estimate) - num(b.estimate))
+      case 'points':
+        return dir * (num(a.points) - num(b.points))
       default:
         return a.order - b.order
     }

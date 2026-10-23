@@ -45,8 +45,18 @@ ai:
   model: "gemini-3.5-flash"
 
 media:
+  storage: "minio"         # minio | filesystem (uses dir)
   dir: "./data/media"
   max_upload_mb: 500
+
+# Object storage for clip and call recordings (MinIO or any S3-compatible store).
+minio:
+  endpoint: ""         # APP_MINIO_ENDPOINT, host:port
+  access_key: ""             # APP_MINIO_ACCESS_KEY
+  secret_key: ""             # APP_MINIO_SECRET_KEY
+  bucket: "meetspace-media"
+  use_ssl: true
+  region: ""
 
 web:
   url: "https://app.meetspace.example"
@@ -54,3 +64,26 @@ web:
     - "http://localhost:5173"
     - "http://localhost:5174"
     - "http://localhost:3000"
+
+resend:
+  api_key: ""              # APP_RESEND_API_KEY
+  from: ""                 # APP_RESEND_FROM, e.g. "Meetspace <noreply@yourdomain.com>" (verified domain)
+
+smtp:
+  host: ""
+  port: 587
+  user: ""
+  password: ""
+  from: ""
+
+# Full-text search across tasks, docs, chat, clips and more.
+opensearch:
+  urls: []          # APP_OPENSEARCH_URLS, comma-separated
+  username: ""
+  password: ""
+  index: "meetspace-search"
+
+# Third-party integrations (GitHub). The key encrypts stored access tokens;
+# set APP_INTEGRATIONS_ENCRYPTION_KEY to a long random string in production.
+integrations:
+  encryption_key: ""
