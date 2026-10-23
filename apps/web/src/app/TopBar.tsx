@@ -1,11 +1,13 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Bell, Keyboard, Settings, Sparkles, LogOut, Menu, Moon, PanelLeft, Pause, Plus, Search, Sun } from 'lucide-react'
 import { clock, useElapsed } from './task/TaskExtras'
 import { useMe, useStore } from '../store/useStore'
-import { Avatar, Logo, MenuItem, Popover, usePopover } from './components/ui'
+import { Avatar, Logo, MenuItem, Modal, Popover, usePopover } from './components/ui'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
 import { useAssistant } from './ai/useAssistant'
 import { CallPill } from './calls/CallLayer'
+import { useCall } from './calls/useCall'
 
 export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
   const me = useMe()
@@ -14,6 +16,7 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
   const nav = useNavigate()
   const userMenu = usePopover()
   const newMenu = usePopover()
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   const quickTask = () => {
     const listId = lists[0]?.id
@@ -96,15 +99,20 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
         <MenuItem onClick={() => (window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' })), userMenu.close())}>
           <Keyboard size={15} /> Keyboard shortcuts
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            logout()
-            nav('/')
-          }}
-        >
+        <MenuItem onClick={() => (userMenu.close(), setConfirmLogout(true))}>
           <LogOut size={15} /> Log out
         </MenuItem>
       </Popover>
+      <LogoutDialog
+        open={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={() => {
+          setConfirmLogout(false)
+          if (useCall.getState().phase !== 'idle') useCall.getState().leave()
+          logout()
+          nav('/')
+        }}
+      />
     </header>
   )
 }
@@ -125,5 +133,48 @@ function RunningTimer() {
         <Pause size={14} />
       </button>
     </span>
+  )
+}
+
+function LogoutDialog({ open, onClose, onConfirm }: { open: boolean; onClose: () => void; onConfirm: () => void }) {
+  const me = useMe()
+  const workspace = useStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId)?.name)
+  const timer = useStore((s) => !!s.timer)
+  const inCall = useCall((s) => s.phase === 'in-call')
+  return (
+    <Modal open={open} onClose={onClose} className="mt-[18vh] max-w-sm">
+      <div role="alertdialog" aria-labelledby="logout-title" aria-describedby="logout-body" className="p-5">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-500/15">
+            <LogOut size={18} />
+          </span>
+          <h2 id="logout-title" className="text-lg font-semibold">
+            Log out of Meetspace?
+          </h2>
+        </div>
+        <div id="logout-body" className="text-muted mt-3 space-y-2 text-sm">
+          <p>
+            You’re signed in as <span className="text-app font-medium">{me.email || me.name}</span>
+            {workspace && (
+              <>
+                {' '}
+                in <span className="text-app font-medium">{workspace}</span>
+              </>
+            )}
+            . You’ll need to log in again to get back.
+          </p>
+          {inCall && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">You’ll leave the call you’re in.</p>}
+          {timer && <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">Your timer keeps running until you stop it.</p>}
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="hover-surface rounded-lg px-3.5 py-2 text-sm font-medium">
+            Cancel
+          </button>
+          <button autoFocus onClick={onConfirm} className="rounded-lg bg-red-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-red-700">
+            Log out
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
