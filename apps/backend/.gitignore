@@ -1,4 +1,6 @@
 bin/
 *.out
 .env
-tmp
+tmpdata/
+logs/
+data/

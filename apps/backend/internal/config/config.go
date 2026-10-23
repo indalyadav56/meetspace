@@ -16,6 +16,11 @@ import (
 type Config struct {
 	Server     Server        `mapstructure:"server"`
 	Postgres   Postgres      `mapstructure:"postgres"`
+	Redis      Redis         `mapstructure:"redis"`
+	LiveKit    LiveKit       `mapstructure:"livekit"`
+	AI         AI            `mapstructure:"ai"`
+	Media      Media         `mapstructure:"media"`
+	Web        Web           `mapstructure:"web"`
 	Logger     logger.Config `mapstructure:"logger"`
 	Admin      Admin         `mapstructure:"admin"`
 	JWT        JWT           `mapstructure:"jwt"`
@@ -54,6 +59,45 @@ func (c ClickHouse) DSN() string {
 		RawQuery: q.Encode(),
 	}
 	return u.String()
+}
+
+type Redis struct {
+	Host         string        `mapstructure:"host"`
+	Port         int           `mapstructure:"port"`
+	Password     string        `mapstructure:"password"`
+	DB           int           `mapstructure:"db"`
+	DialTimeout  time.Duration `mapstructure:"dial_timeout"`
+	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout time.Duration `mapstructure:"write_timeout"`
+	PoolSize     int           `mapstructure:"pool_size"`
+}
+
+// LiveKit points at a self-hosted livekit-server.
+type LiveKit struct {
+	// URL is the WebSocket URL browsers connect to (ws://localhost:7880).
+	URL string `mapstructure:"url"`
+	// APIURL is the HTTP URL the backend uses for the room service (http://livekit:7880).
+	APIURL    string        `mapstructure:"api_url"`
+	APIKey    string        `mapstructure:"api_key"`
+	APISecret string        `mapstructure:"api_secret"`
+	TokenTTL  time.Duration `mapstructure:"token_ttl"`
+}
+
+// AI configures the ADK assistant. It is disabled when GeminiAPIKey is empty.
+type AI struct {
+	GeminiAPIKey string `mapstructure:"gemini_api_key"`
+	Model        string `mapstructure:"model"`
+}
+
+type Media struct {
+	Dir         string `mapstructure:"dir"`
+	MaxUploadMB int64  `mapstructure:"max_upload_mb"`
+}
+
+type Web struct {
+	// URL is the public web app origin, used for CORS and links.
+	URL            string   `mapstructure:"url"`
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
 type Kafka struct {

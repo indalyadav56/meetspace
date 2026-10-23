@@ -1,85 +1,56 @@
-app:
-  name: "logify-backend"
-  version: "1.0.0"
-
 logger:
   level: info
-  format: json
-  output: both
-  file:
-    filename: ./logs/logify.log
-    max_size: 100
-    max_backups: 5
-    max_age: 30
-    compress: true
 
 server:
-  http:
-    host: "0.0.0.0"
-    port: 8080
-    read_timeout: 10s
-    write_timeout: 15s
-    idle_timeout: 60s
-  
-  grpc:
-    host: "0.0.0.0"
-    port: 9090
-    reflection: false
-    max_recv_msg_size: 4194304
-    max_send_msg_size: 4194304
-    keepalive:
-      max_connection_idle: 60s
-      max_connection_age: 300s
-      time: 30s
-      timeout: 10s
+  port: "8080"
+  read_timeout: 15s
+  write_timeout: 0s   # streaming endpoints (assistant SSE, websockets) manage their own deadlines
+  idle_timeout: 60s
 
 jwt:
-  secret: ""
-  issuer: "higlint"
-  access_token_ttl: 60m
+  secret: ""          # set APP_JWT_SECRET
+  issuer: "meetspace"
+  access_token_ttl: 15m
   refresh_token_ttl: 720h   # 30 days
 
 postgres:
   host: "localhost"
-  user: ""
-  password: ""
-  database: "logify"
   port: 5432
+  user: "meetspace"
+  password: ""       # set APP_POSTGRES_PASSWORD
+  database: "meetspace"
   ssl_mode: "disable"
   max_open_conns: 25
   max_idle_conns: 10
   conn_max_lifetime: 5m
-  conn_max_idle_time: 1m
 
 redis:
   host: "localhost"
-  password: ""
-  tls_enabled: false
   port: 6379
   db: 0
   dial_timeout: 3s
-  read_timeout: 1s
-  write_timeout: 1s
+  read_timeout: 3s
+  write_timeout: 3s
   pool_size: 20
-  min_idle_conns: 5
 
-kafka:
-  brokers:
-    - "localhost:9092"
+livekit:
+  url: "ws://localhost:7880"
+  api_url: "http://localhost:7880"
+  api_key: "devkey"
+  api_secret: ""     # set APP_LIVEKIT_API_SECRET
+  token_ttl: 6h
 
-clickhouse:
-  host: "localhost"
-  port: 9000
-  database: "logify"
-  user: ""
-  password: ""
-  secure: false
-  max_open_conns: 25
-  max_idle_conns: 10
-  conn_max_lifetime: 5m
-  conn_max_idle_time: 1m
+ai:
+  gemini_api_key: ""   # set APP_AI_GEMINI_API_KEY to enable the assistant
+  model: "gemini-3.5-flash"
 
-ollama:
-  host: "http://localhost:11434"
-  model: "qwen3-embedding:8b"
-  timeout: 60s
+media:
+  dir: "./data/media"
+  max_upload_mb: 500
+
+web:
+  url: "https://app.meetspace.example"
+  allowed_origins:
+    - "http://localhost:5173"
+    - "http://localhost:5174"
+    - "http://localhost:3000"
