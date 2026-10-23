@@ -18,6 +18,11 @@ type UserDirectory interface {
 	ProfilesMap(ctx context.Context, ids []string) ([]map[string]any, error)
 }
 
+// InviteNotifier tells someone they were added to a workspace (by email).
+type InviteNotifier interface {
+	NotifyInvite(ctx context.Context, email, inviterID, workspaceName string)
+}
+
 // Bootstrapper creates the starter content of a new workspace (a project, a channel...).
 type Bootstrapper interface {
 	Bootstrap(ctx context.Context, workspaceID, ownerID string) error

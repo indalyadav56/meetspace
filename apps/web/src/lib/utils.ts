@@ -61,7 +61,7 @@ export function priorityMeta(p: Priority) {
   return PRIORITIES.find((x) => x.value === p) ?? null
 }
 
-export const TAG_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#6366f1']
+export const TAG_COLORS = ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#f45f2f', '#149c89']
 
 export function tagColor(tag: string) {
   let h = 0
@@ -69,4 +69,4 @@ export function tagColor(tag: string) {
   return TAG_COLORS[h % TAG_COLORS.length]
 }
 
-export const SPACE_COLORS = ['#4f46e5', '#14b8a6', '#f43f5e', '#f59e0b', '#0ea5e9', '#8b5cf6', '#10b981', '#ec4899']
+export const SPACE_COLORS = ['#0b7f71', '#f45f2f', '#f43f5e', '#f59e0b', '#0ea5e9', '#8b5cf6', '#10b981', '#ec4899']

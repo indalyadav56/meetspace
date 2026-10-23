@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -70,7 +71,7 @@ func run() error {
 		Handlers:       c.Handlers,
 		Log:            c.Log,
 		AllowedOrigins: cfg.Web.AllowedOrigins,
-		Ready:          shared.Ready,
+		Ready:          c.Ready,
 		ReleaseMode:    isProd,
 	})
 
@@ -96,6 +97,9 @@ func run() error {
 		}
 		return err
 	})
+	// GitHub: link pull requests and commits that mention MS-123 even without a
+	// public webhook URL. Upserts are idempotent, so extra replicas are harmless.
+	g.Go(func() error { return c.Services.Integrations.RunSync(gctx, 10*time.Minute) })
 	g.Go(func() error {
 		c.Log.Info("starting meetspace server", zap.String("env", cfg.AppEnv), zap.Int("port", httpCfg.Port))
 		return httpserver.New(httpCfg, router, nil).Run(gctx)

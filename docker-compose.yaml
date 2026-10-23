@@ -1,4 +1,4 @@
-# Meetspace local stack: docker compose up --build
+# Meetspace local stack: docker compose up --build, then open http://localhost
 # Then seed demo data: docker compose run --rm backend ./seed
 name: meetspace
 
@@ -7,15 +7,37 @@ x-backend-env: &backend-env
   APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-only-change-me}
   APP_POSTGRES_HOST: postgres
   APP_REDIS_HOST: redis
-  APP_LIVEKIT_URL: ws://localhost:7880
+  # Browsers reach LiveKit signalling through the gateway.
+  APP_LIVEKIT_URL: ws://localhost/livekit
   APP_LIVEKIT_API_URL: http://livekit:7880
   APP_LIVEKIT_API_KEY: devkey
   APP_LIVEKIT_API_SECRET: meetspace-dev-livekit-secret-0123456789
   APP_AI_GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-  APP_MEDIA_DIR: /data/media
-  APP_WEB_URL: http://localhost:3000
+  APP_WEB_URL: http://localhost
+  APP_MEDIA_STORAGE: minio
+  APP_MINIO_ENDPOINT: minio:9000
+  APP_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-meetspace}
+  APP_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-meetspace-dev-minio-secret}
+  APP_MINIO_BUCKET: meetspace-media
+  APP_MINIO_USE_SSL: "false"
+  APP_OPENSEARCH_URLS: http://opensearch:9200
 
 services:
+  # Single entry point: app, API, LiveKit signalling and MinIO console on port 80.
+  gateway:
+    image: caddy:2.11.7-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - web
+      - backend
+      - minio
+      - livekit
+    restart: unless-stopped
+
   postgres:
     image: postgres:17-alpine
     environment:
@@ -41,6 +63,48 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Object storage for clip and call recordings (S3 API on 9000, console on 9001).
+  minio:
+    build:
+      context: ./deploy/minio
+    image: meetspace-minio:RELEASE.2025-10-15T17-29-55Z
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-meetspace}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-meetspace-dev-minio-secret}
+      # The console is served by the gateway at /storage.
+      MINIO_BROWSER_REDIRECT_URL: http://localhost/storage
+    ports:
+      - "9000:9000" # S3 API, for local `go run` development
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Full-text search (Apache-2.0 fork of Elasticsearch). Single node, security
+  # plugin off for local development; enable it and set credentials in production.
+  opensearch:
+    image: opensearchproject/opensearch:3.9.0
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    ports:
+      - "9200:9200" # for local `go run` development
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
 
   livekit:
     image: livekit/livekit-server:v1.9.4
@@ -70,15 +134,22 @@ services:
     build:
       context: ./apps/backend
     command: ["./server"]
+    # Backend secrets (e.g. APP_SMTP_* for Resend) live in apps/backend/.env.
+    # Values under environment: win, so Docker hostnames still apply.
+    env_file:
+      - path: ./apps/backend/.env
+        required: false
     ports:
       - "8080:8080"
     environment: *backend-env
-    volumes:
-      - media_data:/data/media
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      opensearch:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
@@ -88,21 +159,31 @@ services:
     build:
       context: ./apps/backend
     command: ["./worker"]
+    # Backend secrets (e.g. APP_SMTP_* for Resend) live in apps/backend/.env.
+    # Values under environment: win, so Docker hostnames still apply.
+    env_file:
+      - path: ./apps/backend/.env
+        required: false
     environment: *backend-env
     depends_on:
       backend:
         condition: service_started
+      opensearch:
+        condition: service_healthy
     restart: on-failure
 
   web:
     build:
       context: ./apps/web
-    ports:
-      - "3000:80"
+    # Served through the gateway on port 80.
+    expose:
+      - "80"
     depends_on:
       - backend
     restart: always
 
 volumes:
   postgres_data:
-  media_data:
+  minio_data:
+  caddy_data:
+  opensearch_data:

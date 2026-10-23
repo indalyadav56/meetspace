@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryState } from '../../lib/useQueryState'
 import { format, parseISO } from 'date-fns'
 import { Camera, CheckSquare, Circle, Download, Film, Hash, Mic, Monitor, Search, Share2, Trash2, Video, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
@@ -19,7 +20,7 @@ export default function ClipsPage() {
   const clips = useStore((s) => s.clips)
   const openRecorder = useRecorder((s) => s.open)
   const [q, setQ] = useState('')
-  const [kind, setKind] = useState<'all' | ClipKind>('all')
+  const [kind, setKind] = useQueryState<'all' | ClipKind>('kind', 'all')
   const [active, setActive] = useState<Clip | null>(null)
   const shown = clips.filter((c) => (kind === 'all' || c.kind === kind) && c.title.toLowerCase().includes(q.toLowerCase()))
 
@@ -62,7 +63,7 @@ export default function ClipsPage() {
               const Icon = KIND_ICON[c.kind]
               return (
                 <button key={c.id} onClick={() => setActive(c)} className="border-app group hover:border-brand-500 overflow-hidden rounded-xl border text-left transition-colors">
-                  <div className="relative aspect-video bg-slate-900">
+                  <div className="relative aspect-video bg-stone-900">
                     {c.thumb ? <img src={c.thumb} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-white/40">{c.kind === 'audio' ? <Mic size={36} /> : <Film size={36} />}</div>}
                     <span className="absolute right-2 bottom-2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[11px] text-white">{formatDuration(c.durationSec)}</span>
                     <span className="absolute top-2 left-2 rounded bg-black/60 p-1 text-white">

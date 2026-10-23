@@ -141,7 +141,7 @@ export default function Home() {
             {agenda.length === 0 && meetingsSoon.length === 0 && <p className="text-muted px-2 py-6 text-center text-sm">Nothing due this week.</p>}
             {meetingsSoon.map((m) => (
               <Link key={m.id} to="/app/chat/calls" className="hover-surface flex items-center gap-2 rounded-md px-2 py-2 text-sm">
-                <span className="w-14 shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-center text-[11px] font-semibold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">{format(parseISO(m.start), 'EEE d')}</span>
+                <span className="w-14 shrink-0 rounded bg-brand-50 px-1.5 py-0.5 text-center text-[11px] font-semibold text-brand-700 dark:bg-brand-500/20 dark:text-brand-200">{format(parseISO(m.start), 'EEE d')}</span>
                 <Video size={13} className="text-muted shrink-0" />
                 <span className="truncate">{m.title}</span>
                 <span className="text-faint ml-auto shrink-0 text-xs">{format(parseISO(m.start), 'h:mm a')}</span>

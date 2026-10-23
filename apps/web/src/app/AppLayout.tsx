@@ -6,7 +6,7 @@ import CallLayer from './calls/CallLayer'
 import Recorder from './clips/Recorder'
 import { useAssistant } from './ai/useAssistant'
 import { useStore } from '../store/useStore'
-import Sidebar from './Sidebar'
+import Sidebar, { hasSectionSidebar } from './SectionSidebar'
 import TopBar from './TopBar'
 import Rail from './Rail'
 import TaskDetail from './task/TaskDetail'
@@ -22,7 +22,7 @@ function Toaster() {
   return (
     <div className="fixed bottom-4 left-1/2 z-[70] flex -translate-x-1/2 flex-col items-center gap-2">
       {toasts.map((t) => (
-        <div key={t.id} role="status" className={cn('flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-white shadow-lg', t.tone === 'error' ? 'bg-red-600' : 'bg-slate-900')}>
+        <div key={t.id} role="status" className={cn('flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-white shadow-lg', t.tone === 'error' ? 'bg-red-600' : 'bg-stone-900')}>
           {t.text}
           <button onClick={() => dismiss(t.id)} aria-label="Dismiss" className="opacity-70 hover:opacity-100">
             <X size={14} />
@@ -89,17 +89,19 @@ export default function AppLayout() {
       <TopBar onMenu={() => setMobileNav(true)} onSearch={() => setPalette(true)} />
       <div className="flex min-h-0 flex-1">
         <Rail />
-        {/* Desktop sidebar */}
-        <div className={cn('hidden shrink-0 transition-[width] duration-200 md:block', collapsed ? 'w-0 overflow-hidden' : 'w-64')}>
-          <Sidebar />
-        </div>
+        {/* Desktop sidebar: follows the rail section (chat brings its own channel list) */}
+        {hasSectionSidebar(loc.pathname) && (
+          <div className={cn('hidden shrink-0 transition-[width] duration-200 md:block', collapsed ? 'w-0 overflow-hidden' : 'w-64')}>
+            <Sidebar />
+          </div>
+        )}
         {/* Mobile drawer */}
         {mobileNav && (
           <div className="fixed inset-0 z-40 md:hidden">
             <div className="absolute inset-0 bg-black/40" onClick={() => setMobileNav(false)} />
             <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw]">
               <Rail mobile />
-              <Sidebar />
+              {hasSectionSidebar(loc.pathname) && <Sidebar />}
             </div>
           </div>
         )}

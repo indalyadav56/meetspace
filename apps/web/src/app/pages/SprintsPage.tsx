@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useQueryState } from '../../lib/useQueryState'
 import { addDays, differenceInCalendarDays, format, isAfter, parseISO } from 'date-fns'
 import { ArrowRight, CalendarRange, CheckCircle2, Flag, Play, Plus, Target, Trash2, Zap } from 'lucide-react'
 import { useStore } from '../../store/useStore'
@@ -44,8 +45,8 @@ function Burndown({ data, total }: { data: ReturnType<typeof burndown>['points']
         </g>
       ))}
       <path d={ideal} fill="none" stroke="var(--text-faint)" strokeWidth={1.5} strokeDasharray="5 4" />
-      {actual && <path d={actual} fill="none" stroke="#6366f1" strokeWidth={2.5} strokeLinejoin="round" />}
-      {actualPts.length > 0 && <circle cx={actualPts[actualPts.length - 1][0]} cy={actualPts[actualPts.length - 1][1]} r={4} fill="#6366f1" />}
+      {actual && <path d={actual} fill="none" stroke="#149c89" strokeWidth={2.5} strokeLinejoin="round" />}
+      {actualPts.length > 0 && <circle cx={actualPts[actualPts.length - 1][0]} cy={actualPts[actualPts.length - 1][1]} r={4} fill="#149c89" />}
       {data.map((p, i) =>
         i % Math.ceil(data.length / 6) === 0 || i === data.length - 1 ? (
           <text key={i} x={x(i)} y={H - 6} textAnchor="middle" className="fill-[var(--text-faint)] text-[10px]">
@@ -61,7 +62,7 @@ export default function SprintsPage() {
   const s = useStore()
   const r = useTaskResolver()
   const withSprints = s.spaces.filter((sp) => s.sprints.some((x) => x.spaceId === sp.id))
-  const [spaceId, setSpaceId] = useState(withSprints[0]?.id ?? s.spaces[0]?.id ?? '')
+  const [spaceId, setSpaceId] = useQueryState<string>('project', withSprints[0]?.id ?? s.spaces[0]?.id ?? '')
   const space = s.spaces.find((sp) => sp.id === spaceId)
   const sprints = s.sprints.filter((x) => x.spaceId === spaceId).sort((a, b) => a.startDate.localeCompare(b.startDate))
   const active = sprints.find((x) => x.status === 'active')
@@ -122,7 +123,7 @@ export default function SprintsPage() {
             <div className="border-app mb-4 rounded-xl border p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <input value={current.name} onChange={(e) => s.updateSprint(current.id, { name: e.target.value })} className="min-w-0 bg-transparent text-lg font-bold outline-none" aria-label="Sprint name" />
-                <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase', current.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : current.status === 'planned' ? 'surface-muted text-muted' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300')}>
+                <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase', current.status === 'active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : current.status === 'planned' ? 'surface-muted text-muted' : 'bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-300')}>
                   {current.status}
                 </span>
                 <span className="text-muted flex items-center gap-1 text-xs">
@@ -185,7 +186,7 @@ export default function SprintsPage() {
                   <h2 className="mb-1 flex items-center gap-3 text-sm font-semibold">
                     Burndown
                     <span className="text-muted flex items-center gap-1 text-xs font-normal">
-                      <span className="h-0.5 w-4 bg-[#6366f1]" /> Remaining
+                      <span className="h-0.5 w-4 bg-[#149c89]" /> Remaining
                     </span>
                     <span className="text-muted flex items-center gap-1 text-xs font-normal">
                       <span className="h-0 w-4 border-t border-dashed border-[var(--text-faint)]" /> Ideal

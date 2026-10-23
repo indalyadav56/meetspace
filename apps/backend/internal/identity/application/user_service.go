@@ -77,6 +77,10 @@ func (s *UserService) Profiles(ctx context.Context, ids []string) ([]Profile, er
 // FindOrInvite returns the user with this email, creating a placeholder account
 // (unusable until they reset a password) when none exists; created reports
 // which happened. Used by workspace invites.
+// invitedHashPrefix marks placeholder accounts created by an invite: no
+// password can match it, so the person must set one from the invite email.
+const invitedHashPrefix = "!invited:"
+
 func (s *UserService) FindOrInvite(ctx context.Context, email, name string) (id string, created bool, err error) {
 	email = normalizeEmail(email)
 	u, err := s.users.GetByEmail(ctx, email)
@@ -94,7 +98,7 @@ func (s *UserService) FindOrInvite(ctx context.Context, email, name string) (id 
 		return "", false, err
 	}
 	// Unusable random password; the invitee sets a real one via password reset.
-	nu := &domain.User{Email: email, FullName: strings.TrimSpace(name), Color: colorFor(email), PasswordHash: "!invited:" + hashToken(raw), IsActive: true}
+	nu := &domain.User{Email: email, FullName: strings.TrimSpace(name), Color: colorFor(email), PasswordHash: invitedHashPrefix + hashToken(raw), IsActive: true}
 	if err := s.users.Create(ctx, nu); err != nil {
 		return "", false, err
 	}

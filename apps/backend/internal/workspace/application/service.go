@@ -17,11 +17,12 @@ type Service struct {
 	pub           Publisher
 	inviter       UserInviter
 	users         UserDirectory
+	notifier      InviteNotifier
 	bootstrappers []Bootstrapper
 }
 
-func NewService(repo domain.Repository, pub Publisher, inviter UserInviter, users UserDirectory, bootstrappers ...Bootstrapper) *Service {
-	return &Service{repo: repo, pub: pub, inviter: inviter, users: users, bootstrappers: bootstrappers}
+func NewService(repo domain.Repository, pub Publisher, inviter UserInviter, users UserDirectory, notifier InviteNotifier, bootstrappers ...Bootstrapper) *Service {
+	return &Service{repo: repo, pub: pub, inviter: inviter, users: users, notifier: notifier, bootstrappers: bootstrappers}
 }
 
 func cleanName(n string) (string, error) {
@@ -52,6 +53,9 @@ func (s *Service) Create(ctx context.Context, userID, id, name, color string) (*
 	return s.repo.Get(ctx, w.ID)
 }
 
+// AllIDs lists every workspace, for maintenance jobs.
+func (s *Service) AllIDs(ctx context.Context) ([]string, error) { return s.repo.AllIDs(ctx) }
+
 func (s *Service) ListForUser(ctx context.Context, userID string) ([]domain.Workspace, error) {
 	return s.repo.ListForUser(ctx, userID)
 }
@@ -59,6 +63,15 @@ func (s *Service) ListForUser(ctx context.Context, userID string) ([]domain.Work
 // Role returns the caller's role, or ErrNotMember.
 func (s *Service) Role(ctx context.Context, workspaceID, userID string) (domain.Role, error) {
 	return s.repo.Role(ctx, workspaceID, userID)
+}
+
+// CanManage reports whether the user is an owner or admin of the workspace.
+func (s *Service) CanManage(ctx context.Context, workspaceID, userID string) (bool, error) {
+	r, err := s.repo.Role(ctx, workspaceID, userID)
+	if err == domain.ErrNotMember {
+		return false, nil
+	}
+	return err == nil && r.CanManage(), err
 }
 
 // IsMember satisfies other contexts' membership ports.
@@ -160,6 +173,12 @@ func (s *Service) Invite(ctx context.Context, workspaceID, actorID, email, name 
 	if err := s.repo.UpsertMember(ctx, workspaceID, m); err != nil {
 		return nil, err
 	}
+	if s.notifier != nil {
+		if w, err := s.repo.Get(ctx, workspaceID); err == nil {
+			// Email is best-effort and must not slow down or fail the invite.
+			go s.notifier.NotifyInvite(context.WithoutCancel(ctx), email, actorID, w.Name)
+		}
+	}
 	return s.publishMember(ctx, workspaceID, m)
 }
 
@@ -187,6 +206,10 @@ func (s *Service) SetRole(ctx context.Context, workspaceID, actorID, userID stri
 		}
 	}
 	m := domain.Member{UserID: userID, Role: role}
+	if all, err := s.memberSet(ctx, workspaceID); err == nil {
+		// Keep title and manager in the published copy.
+		m.Title, m.ManagerID, m.Invited = all[userID].Title, all[userID].ManagerID, all[userID].Invited
+	}
 	if err := s.repo.UpsertMember(ctx, workspaceID, m); err != nil {
 		return nil, err
 	}
@@ -222,7 +245,7 @@ func (s *Service) publishMember(ctx context.Context, workspaceID string, m domai
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]any{"userId": m.UserID, "role": m.Role, "invited": m.Invited}
+	out := map[string]any{"userId": m.UserID, "role": m.Role, "invited": m.Invited, "title": m.Title, "managerId": m.ManagerID}
 	s.pub.Publish(ctx, workspaceID, "members", "upsert", out, nil)
 	if len(profiles) == 1 {
 		s.pub.Publish(ctx, workspaceID, "users", "upsert", profiles[0], nil)
@@ -244,5 +267,9 @@ func (s *Service) Snapshot(ctx context.Context, workspaceID, _ string) (map[stri
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"workspace": w, "members": w.Members, "users": profiles}, nil
+	teams, err := s.repo.ListTeams(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"workspace": w, "members": w.Members, "users": profiles, "teams": teams}, nil
 }

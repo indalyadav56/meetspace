@@ -1,10 +1,11 @@
 import { useEffect, type ReactNode } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { useStore } from './store/useStore'
 import Landing from './marketing/Landing'
 import Pricing from './marketing/Pricing'
 import { LoginPage } from './marketing/Auth'
 import SignupPage from './marketing/Signup'
+import { ForgotPasswordPage, ResetPasswordPage } from './marketing/PasswordReset'
 import AppLayout from './app/AppLayout'
 import Home from './app/pages/Home'
 import Inbox from './app/pages/Inbox'
@@ -22,6 +23,10 @@ import ClipsPage from './app/pages/ClipsPage'
 import FormsPage from './app/pages/FormsPage'
 import SprintsPage from './app/pages/SprintsPage'
 import SettingsPage from './app/pages/SettingsPage'
+import AIPage from './app/pages/ai/AIPage'
+import PlannerPage from './app/pages/planner/PlannerPage'
+import AppsPage from './app/pages/apps/AppsPage'
+import TeamsPage from './app/pages/teams/TeamsPage'
 import PublicForm from './marketing/PublicForm'
 import { Logo } from './app/components/ui'
 
@@ -60,6 +65,18 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** Shareable task link (/app/t/:taskId): opens the task over its List. */
+function TaskLink() {
+  const { taskId = '' } = useParams()
+  const task = useStore((s) => s.tasks.find((t) => t.id === taskId))
+  const openTask = useStore((s) => s.openTask)
+  useEffect(() => {
+    if (task) openTask(task.id)
+  }, [task, openTask])
+  if (!task) return <div className="text-muted p-10 text-center text-sm">This task doesn’t exist or you don’t have access to it.</div>
+  return <Navigate to={`/app/list/${task.listId}`} replace />
+}
+
 export default function App() {
   const theme = useStore((s) => s.theme)
   const { pathname } = useLocation()
@@ -79,6 +96,8 @@ export default function App() {
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/form/:formId" element={<PublicForm />} />
       <Route
         path="/app"
@@ -108,9 +127,14 @@ export default function App() {
         <Route path="forms" element={<FormsPage />} />
         <Route path="sprints" element={<SprintsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="ai" element={<AIPage />} />
+        <Route path="planner" element={<PlannerPage />} />
+        <Route path="apps" element={<AppsPage />} />
+        <Route path="teams" element={<TeamsPage />} />
         <Route path="forms/:formId" element={<FormsPage />} />
         <Route path="space/:spaceId" element={<SpacePage />} />
         <Route path="list/:listId" element={<ListPage />} />
+        <Route path="t/:taskId" element={<TaskLink />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

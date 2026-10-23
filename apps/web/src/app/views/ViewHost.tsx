@@ -93,7 +93,7 @@ export default function ViewHost({
         }
       />
       <div className="min-h-0 flex-1">
-        {active === 'list' && <ListView {...props} tasks={tasks} />}
+        {active === 'list' && <ListView {...props} tasks={tasks} viewKey={viewKey} fieldListId={mixed ? undefined : fieldListId} />}
         {active === 'board' && <BoardView {...props} />}
         {active === 'calendar' && <CalendarView {...props} />}
         {active === 'table' && <TableView {...props} />}

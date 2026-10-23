@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQueryState } from '../../lib/useQueryState'
 import { ArrowRight, Plus, Trash2, Workflow, X, Zap } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { ActionType, Automation, AutomationAction, ID, Space, TriggerType } from '../../store/types'
@@ -58,7 +59,7 @@ const RECIPES: { name: string; build: (s: Space) => Omit<Automation, 'id' | 'run
 export default function AutomationsPage() {
   const { automations, spaces, updateAutomation, deleteAutomation, addAutomation } = useStore()
   const describe = useDescribe()
-  const [spaceId, setSpaceId] = useState<ID>(spaces[0]?.id ?? '')
+  const [spaceId, setSpaceId] = useQueryState<ID>('project', spaces[0]?.id ?? '')
   const [editing, setEditing] = useState<Automation | 'new' | null>(null)
   const space = spaces.find((s) => s.id === spaceId)
   const list = automations.filter((a) => a.spaceId === spaceId)
@@ -107,7 +108,7 @@ export default function AutomationsPage() {
               </span>
               <label className="relative inline-flex cursor-pointer items-center" title={a.enabled ? 'Turn off' : 'Turn on'}>
                 <input type="checkbox" checked={a.enabled} onChange={(e) => updateAutomation(a.id, { enabled: e.target.checked })} className="peer sr-only" />
-                <span className="peer-checked:bg-brand-600 h-5 w-9 rounded-full bg-slate-300 transition-colors dark:bg-slate-600" />
+                <span className="peer-checked:bg-brand-600 h-5 w-9 rounded-full bg-stone-300 transition-colors dark:bg-stone-600" />
                 <span className="absolute left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4" />
               </label>
               <button onClick={() => confirm(`Delete “${a.name}”?`) && deleteAutomation(a.id)} className="text-faint hidden hover:text-red-500 group-hover:block" aria-label="Delete automation">

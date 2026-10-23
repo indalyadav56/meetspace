@@ -114,25 +114,25 @@ export function MarketingNav() {
               <button
                 onClick={() => setOpen(open === k ? null : k)}
                 aria-expanded={open === k}
-                className="flex items-center gap-1 rounded-lg px-3 py-2 text-[15px] font-medium text-slate-700 hover:bg-slate-100"
+                className="flex items-center gap-1 rounded-lg px-3 py-2 text-[15px] font-medium text-stone-700 hover:bg-stone-100"
               >
                 {k} <ChevronDown size={15} className={cn('transition-transform', open === k && 'rotate-180')} />
               </button>
               {open === k && (
                 <div className="absolute top-full left-0 pt-2">
-                  <div className="animate-fade-up flex gap-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl [animation-duration:.18s]">
+                  <div className="animate-fade-up flex gap-8 rounded-2xl border border-stone-200 bg-white p-6 shadow-2xl [animation-duration:.18s]">
                     {MENUS[k].map((g) => (
                       <div key={g.heading} className="w-64">
-                        <div className="mb-3 text-xs font-semibold tracking-wide text-slate-400 uppercase">{g.heading}</div>
+                        <div className="mb-3 text-xs font-semibold tracking-wide text-stone-400 uppercase">{g.heading}</div>
                         <div className="space-y-1">
                           {g.items.map((it) => (
-                            <Link key={it.title} to={it.to} onClick={() => setOpen(null)} className="flex gap-3 rounded-xl p-2 hover:bg-slate-50">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                            <Link key={it.title} to={it.to} onClick={() => setOpen(null)} className="flex gap-3 rounded-xl p-2 hover:bg-stone-50">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
                                 <it.icon size={18} />
                               </span>
                               <span>
-                                <span className="block text-sm font-semibold text-slate-900">{it.title}</span>
-                                <span className="block text-[13px] text-slate-500">{it.desc}</span>
+                                <span className="block text-sm font-semibold text-stone-900">{it.title}</span>
+                                <span className="block text-[13px] text-stone-500">{it.desc}</span>
                               </span>
                             </Link>
                           ))}
@@ -144,27 +144,27 @@ export function MarketingNav() {
               )}
             </div>
           ))}
-          <Link to="/pricing" className="rounded-lg px-3 py-2 text-[15px] font-medium text-slate-700 hover:bg-slate-100">
+          <Link to="/pricing" className="rounded-lg px-3 py-2 text-[15px] font-medium text-stone-700 hover:bg-stone-100">
             Pricing
           </Link>
-          <Link to="/pricing#enterprise" className="rounded-lg px-3 py-2 text-[15px] font-medium text-slate-700 hover:bg-slate-100">
+          <Link to="/pricing#enterprise" className="rounded-lg px-3 py-2 text-[15px] font-medium text-stone-700 hover:bg-stone-100">
             Enterprise
           </Link>
         </nav>
         <div className="ml-auto hidden items-center gap-2 lg:flex">
-          <Link to="/pricing" className="px-3 py-2 text-[15px] font-medium text-slate-700 hover:text-slate-950">
+          <Link to="/pricing" className="px-3 py-2 text-[15px] font-medium text-stone-700 hover:text-stone-950">
             Talk to sales
           </Link>
           {authed ? (
-            <Link to="/app/home" className="rounded-xl bg-slate-950 px-4 py-2 text-[15px] font-semibold text-white hover:bg-slate-800">
+            <Link to="/app/home" className="rounded-xl bg-stone-950 px-4 py-2 text-[15px] font-semibold text-white hover:bg-stone-800">
               Open app
             </Link>
           ) : (
             <>
-              <Link to="/login" className="rounded-xl bg-slate-100 px-4 py-2 text-[15px] font-semibold text-slate-900 hover:bg-slate-200">
+              <Link to="/login" className="rounded-xl bg-stone-100 px-4 py-2 text-[15px] font-semibold text-stone-900 hover:bg-stone-200">
                 Log in
               </Link>
-              <Link to="/signup" className="rounded-xl bg-slate-950 px-4 py-2 text-[15px] font-semibold text-white hover:bg-slate-800">
+              <Link to="/signup" className="rounded-xl bg-stone-950 px-4 py-2 text-[15px] font-semibold text-white hover:bg-stone-800">
                 Sign up
               </Link>
             </>
@@ -185,13 +185,13 @@ export function MarketingNav() {
           </div>
           <div className="space-y-6 px-4 pb-10">
             {Object.entries(MENUS).map(([k, groups]) => (
-              <details key={k} className="group border-b border-slate-100 pb-3">
+              <details key={k} className="group border-b border-stone-100 pb-3">
                 <summary className="flex cursor-pointer list-none items-center justify-between py-2 text-lg font-semibold">
                   {k} <ChevronDown size={18} className="transition-transform group-open:rotate-180" />
                 </summary>
                 {groups.flatMap((g) => g.items).map((it) => (
-                  <Link key={it.title} to={it.to} onClick={() => setMobile(false)} className="flex items-center gap-3 py-2 text-slate-700">
-                    <it.icon size={18} className="text-indigo-600" /> {it.title}
+                  <Link key={it.title} to={it.to} onClick={() => setMobile(false)} className="flex items-center gap-3 py-2 text-stone-700">
+                    <it.icon size={18} className="text-brand-600" /> {it.title}
                   </Link>
                 ))}
               </details>
@@ -200,10 +200,10 @@ export function MarketingNav() {
               Pricing
             </Link>
             <div className="grid gap-2 pt-4">
-              <Link to="/login" className="rounded-xl bg-slate-100 py-3 text-center font-semibold">
+              <Link to="/login" className="rounded-xl bg-stone-100 py-3 text-center font-semibold">
                 Log in
               </Link>
-              <Link to="/signup" className="rounded-xl bg-slate-950 py-3 text-center font-semibold text-white">
+              <Link to="/signup" className="rounded-xl bg-stone-950 py-3 text-center font-semibold text-white">
                 Sign up free
               </Link>
             </div>
@@ -224,7 +224,7 @@ const FOOTER: Record<string, string[]> = {
 
 export function MarketingFooter() {
   return (
-    <footer className="bg-slate-950 text-slate-400">
+    <footer className="bg-stone-950 text-stone-400">
       <div className="mx-auto max-w-[1280px] px-4 py-16 sm:px-6 lg:px-10">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(5,1fr)]">
           <div>
@@ -232,7 +232,7 @@ export function MarketingFooter() {
             <p className="mt-4 max-w-xs text-sm leading-relaxed">One calm place for your team’s tasks, docs and decisions.</p>
             <div className="mt-6 flex gap-2">
               {['App Store', 'Google Play'].map((s) => (
-                <span key={s} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300">
+                <span key={s} className="rounded-lg border border-stone-700 px-3 py-1.5 text-xs text-stone-300">
                   {s}
                 </span>
               ))}
@@ -253,7 +253,7 @@ export function MarketingFooter() {
             </div>
           ))}
         </div>
-        <div className="mt-14 flex flex-col gap-4 border-t border-slate-800 pt-8 text-xs sm:flex-row sm:items-center">
+        <div className="mt-14 flex flex-col gap-4 border-t border-stone-800 pt-8 text-xs sm:flex-row sm:items-center">
           <span>© {new Date().getFullYear()} Meetspace. All rights reserved.</span>
           <div className="flex gap-5 sm:ml-auto">
             <a href="#" className="hover:text-white">

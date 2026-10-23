@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useQueryState } from '../../lib/useQueryState'
 import { addDays, differenceInCalendarDays, format, parseISO, subDays } from 'date-fns'
 import { AlertTriangle, CheckCircle2, Clock, LayoutDashboard, ListTodo } from 'lucide-react'
 import { useStore } from '../../store/useStore'
@@ -98,7 +99,7 @@ function Trend({ points }: { points: { label: string; created: number; completed
         {[0, 0.5, 1].map((f) => (
           <line key={f} x1={pad} x2={W - pad} y1={y(max * f)} y2={y(max * f)} stroke="var(--border)" strokeDasharray="3 4" />
         ))}
-        <path d={line('created')} fill="none" stroke="#6366f1" strokeWidth={2.5} strokeLinejoin="round" />
+        <path d={line('created')} fill="none" stroke="#149c89" strokeWidth={2.5} strokeLinejoin="round" />
         <path d={line('completed')} fill="none" stroke="#10b981" strokeWidth={2.5} strokeLinejoin="round" />
         {points.map((p, i) =>
           i % 2 === 0 ? (
@@ -110,7 +111,7 @@ function Trend({ points }: { points: { label: string; created: number; completed
       </svg>
       <div className="text-muted flex gap-4 text-xs">
         <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-4 bg-[#6366f1]" /> Created
+          <span className="h-0.5 w-4 bg-[#149c89]" /> Created
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-0.5 w-4 bg-[#10b981]" /> Completed
@@ -123,7 +124,7 @@ function Trend({ points }: { points: { label: string; created: number; completed
 export default function Dashboards() {
   const s = useStore()
   const r = useTaskResolver()
-  const [spaceId, setSpaceId] = useState<string>('all')
+  const [spaceId, setSpaceId] = useQueryState<string>('project', 'all')
 
   const tasks = useMemo(() => {
     const top = s.tasks.filter((t) => !t.parentId)
@@ -196,7 +197,7 @@ export default function Dashboards() {
           </select>
         </div>
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {stat('Open tasks', open.length, ListTodo, '#6366f1')}
+          {stat('Open tasks', open.length, ListTodo, '#149c89')}
           {stat('Completed', done.length, CheckCircle2, '#10b981')}
           {stat('Overdue', overdue.length, AlertTriangle, '#ef4444')}
           {stat('Due in 7 days', dueSoon.length, Clock, '#f59e0b')}

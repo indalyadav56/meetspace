@@ -62,6 +62,10 @@ type Repository interface {
 	UpdateTimeEntry(ctx context.Context, workspaceID string, e *TimeEntry) error
 	DeleteTimeEntry(ctx context.Context, workspaceID, id string) error
 	ListTimeEntries(ctx context.Context, workspaceID string) ([]TimeEntry, error)
+
+	GetTimesheet(ctx context.Context, workspaceID, userID, weekStart string) (*Timesheet, error) // nil when not acted on yet
+	SaveTimesheet(ctx context.Context, workspaceID string, t *Timesheet) error
+	ListTimesheets(ctx context.Context, workspaceID string) ([]Timesheet, error)
 	GetTimer(ctx context.Context, workspaceID, userID string) (*Timer, error)
 	SetTimer(ctx context.Context, workspaceID, userID string, t Timer) error
 	DeleteTimer(ctx context.Context, workspaceID, userID string) error

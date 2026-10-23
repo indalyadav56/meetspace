@@ -6,14 +6,18 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/indalyadav56/meetspace/backend/internal/assistant/domain"
 	"github.com/indalyadav56/meetspace/backend/pkg/apperror"
 )
 
 type Service struct {
-	agent Agent // nil when no model is configured
+	agent  Agent // nil when no model is configured
+	agents domain.AgentRepository
 }
 
-func NewService(agent Agent) *Service { return &Service{agent: agent} }
+func NewService(agent Agent, agents domain.AgentRepository) *Service {
+	return &Service{agent: agent, agents: agents}
+}
 
 var ErrDisabled = apperror.Unavailable("assistant_disabled", "the AI assistant is not configured on this server")
 
@@ -40,6 +44,9 @@ func (s *Service) Chat(ctx context.Context, req RunRequest, emit func(Event)) er
 	}
 	if req.SessionID == "" {
 		req.SessionID = uuid.NewString()
+	}
+	if err := s.withAgent(ctx, &req); err != nil {
+		return err
 	}
 	return s.agent.Run(ctx, req, emit)
 }

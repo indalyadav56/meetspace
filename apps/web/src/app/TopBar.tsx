@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bell, Keyboard, Settings, Sparkles, LogOut, Menu, Moon, PanelLeft, Pause, Plus, Search, Sun } from 'lucide-react'
+import { Bell, CalendarClock, CheckSquare, FileText, Keyboard, ListChecks, LogOut, Menu, MessageSquareText, Moon, PanelLeft, Pause, PenTool, Plus, Search, Settings, Sparkles, Sun, Target } from 'lucide-react'
 import { clock, useElapsed } from './task/TaskExtras'
 import { useMe, useStore } from '../store/useStore'
 import { Avatar, Logo, MenuItem, Modal, Popover, usePopover } from './components/ui'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
+import { cn } from '../lib/utils'
 import { useAssistant } from './ai/useAssistant'
 import { CallPill } from './calls/CallLayer'
+import QuickActions from './QuickActions'
 import { useCall } from './calls/useCall'
 
 export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
@@ -16,6 +18,18 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
   const nav = useNavigate()
   const userMenu = usePopover()
   const newMenu = usePopover()
+  const aiMenu = usePopover()
+  const aiOpen = useAssistant((s) => s.open)
+  const openTaskId = useStore((s) => s.openTaskId)
+  const askAI = (prompt?: string) => {
+    aiMenu.close()
+    if (prompt) useAssistant.getState().ask(prompt)
+    else useAssistant.getState().setOpen(true)
+  }
+  const create = (fn: () => void) => () => {
+    fn()
+    newMenu.close()
+  }
   const [confirmLogout, setConfirmLogout] = useState(false)
 
   const quickTask = () => {
@@ -41,7 +55,7 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
 
       <button
         onClick={onSearch}
-        className="surface border-app text-faint mx-auto flex h-8 w-full max-w-md items-center gap-2 rounded-lg border px-3 text-sm"
+        className="surface border-app text-faint mx-auto flex h-8 w-full min-w-0 max-w-md items-center gap-2 rounded-lg border px-3 text-sm"
       >
         <Search size={15} />
         <span className="truncate">Search tasks, docs, lists…</span>
@@ -50,26 +64,56 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
 
       <CallPill />
       <RunningTimer />
+      <QuickActions />
       <button
-        onClick={() => useAssistant.getState().setOpen(!useAssistant.getState().open)}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-teal-500 px-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+        onClick={aiMenu.toggle}
+        aria-expanded={aiMenu.open}
+        className={cn(
+          'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ring-1 transition-colors ring-inset',
+          aiOpen || aiMenu.open
+            ? 'bg-brand-600 text-white ring-brand-600'
+            : 'bg-brand-50 text-brand-700 ring-brand-200 hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/30 dark:hover:bg-brand-500/25',
+        )}
         title="Ask AI (⌘J)"
       >
-        <Sparkles size={15} /> <span className="hidden sm:inline">Ask AI</span>
+        <Sparkles size={15} className={aiOpen || aiMenu.open ? '' : 'text-accent-500'} /> <span className="hidden sm:inline">Ask AI</span>
       </button>
-      <button onClick={newMenu.toggle} className="bg-brand-600 hover:bg-brand-700 inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-sm font-semibold text-white">
-        <Plus size={16} /> <span className="hidden sm:inline">New</span>
+      <Popover open={aiMenu.open} anchor={aiMenu.anchor} onClose={aiMenu.close} align="end" width={250}>
+        <MenuItem onClick={() => askAI()}>
+          <Sparkles size={15} className="text-accent-500" /> Ask anything…
+          <kbd className="surface-muted text-faint ml-auto rounded px-1.5 text-[11px]">⌘J</kbd>
+        </MenuItem>
+        <div className="border-app my-1 border-t" />
+        {openTaskId && (
+          <MenuItem onClick={() => askAI('Summarize this task')}>
+            <MessageSquareText size={15} className="text-muted" /> Summarize this task
+          </MenuItem>
+        )}
+        <MenuItem onClick={() => askAI('What should I work on next?')}>
+          <Target size={15} className="text-muted" /> What should I work on next?
+        </MenuItem>
+        <MenuItem onClick={() => askAI("What's overdue?")}>
+          <CalendarClock size={15} className="text-muted" /> What’s overdue?
+        </MenuItem>
+        <MenuItem onClick={() => askAI('Write my standup')}>
+          <ListChecks size={15} className="text-muted" /> Write my standup
+        </MenuItem>
+      </Popover>
+      <button onClick={newMenu.toggle} aria-expanded={newMenu.open} className="bg-brand-600 hover:bg-brand-700 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-white ring-1 ring-brand-600 ring-inset">
+        <Plus size={15} /> <span className="hidden sm:inline">New</span>
       </button>
-      <Popover open={newMenu.open} anchor={newMenu.anchor} onClose={newMenu.close} align="end">
-        <MenuItem onClick={quickTask}>Task</MenuItem>
-        <MenuItem
-          onClick={() => {
-            const id = useStore.getState().addDoc(null)
-            nav(`/app/docs/${id}`)
-            newMenu.close()
-          }}
-        >
-          Doc
+      <Popover open={newMenu.open} anchor={newMenu.anchor} onClose={newMenu.close} align="end" width={200}>
+        <MenuItem onClick={quickTask}>
+          <CheckSquare size={15} className="text-muted" /> Task
+        </MenuItem>
+        <MenuItem onClick={create(() => nav(`/app/docs/${useStore.getState().addDoc(null)}`))}>
+          <FileText size={15} className="text-muted" /> Doc
+        </MenuItem>
+        <MenuItem onClick={create(() => nav(`/app/whiteboards/${useStore.getState().addWhiteboard()}`))}>
+          <PenTool size={15} className="text-muted" /> Whiteboard
+        </MenuItem>
+        <MenuItem onClick={create(() => (useStore.getState().addGoal(), nav('/app/goals')))}>
+          <Target size={15} className="text-muted" /> Goal
         </MenuItem>
       </Popover>
 
@@ -127,7 +171,7 @@ function RunningTimer() {
       <button onClick={() => openTask(timer.taskId)} className="flex items-center gap-2 px-2.5 hover:bg-emerald-600" title={task?.title}>
         <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
         <span className="font-mono tabular-nums">{clock(sec)}</span>
-        <span className="hidden max-w-36 truncate lg:inline">{task?.title}</span>
+        <span className="hidden max-w-36 truncate 2xl:inline">{task?.title}</span>
       </button>
       <button onClick={stopTimer} className="flex h-full items-center border-l border-white/25 px-2 hover:bg-emerald-600" aria-label="Stop timer">
         <Pause size={14} />

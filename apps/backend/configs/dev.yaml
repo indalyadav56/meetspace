@@ -45,12 +45,50 @@ ai:
   model: "gemini-3.5-flash"
 
 media:
+  storage: "minio"         # minio | filesystem (uses dir)
   dir: "./data/media"
   max_upload_mb: 500
+
+# Object storage for clip and call recordings (MinIO or any S3-compatible store).
+minio:
+  endpoint: "localhost:9000"
+  access_key: "meetspace"
+  secret_key: "meetspace-dev-minio-secret"
+  bucket: "meetspace-media"
+  use_ssl: false
+  region: ""
 
 web:
   url: "http://localhost:5173"
   allowed_origins:
+    - "http://localhost"
     - "http://localhost:5173"
     - "http://localhost:5174"
     - "http://localhost:3000"
+
+# Transactional email (password resets, invites). Set APP_RESEND_API_KEY to send
+# through Resend; without it (and without SMTP) emails are written to the log.
+resend:
+  api_key: ""              # APP_RESEND_API_KEY
+  from: ""                 # APP_RESEND_FROM; default "Meetspace <onboarding@resend.dev>" (test only)
+
+# Optional alternative to Resend: any SMTP provider.
+smtp:
+  host: ""
+  port: 587
+  user: ""
+  password: ""
+  from: ""
+
+# Full-text search across tasks, docs, chat, clips and more.
+opensearch:
+  urls:
+    - "http://localhost:9200"
+  username: ""
+  password: ""
+  index: "meetspace-search"
+
+# Third-party integrations (GitHub). The key encrypts stored access tokens;
+# set APP_INTEGRATIONS_ENCRYPTION_KEY to a long random string in production.
+integrations:
+  encryption_key: ""

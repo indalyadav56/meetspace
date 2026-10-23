@@ -98,7 +98,8 @@ export default function AssistantPanel() {
     if (open) input.current?.focus()
   }, [open])
 
-  if (!open) return null
+  // The AI page shows the same conversation full-size, so the panel steps aside there.
+  if (!open || location.pathname.startsWith('/app/ai')) return null
   const engine = agent?.enabled ? 'server' : 'local'
   const send = (t: string) => {
     ask(t)
@@ -108,11 +109,11 @@ export default function AssistantPanel() {
   return (
     <aside className="surface border-app shadow-pop fixed inset-y-0 right-0 z-[45] flex w-full flex-col border-l sm:w-[420px]" aria-label="AI assistant">
       <header className="border-app flex h-12 shrink-0 items-center gap-2 border-b px-3">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-teal-400 text-white">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-white">
           <Sparkles size={15} />
         </span>
         <span className="font-semibold">Assistant</span>
-        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', engine === 'server' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200' : 'surface-muted text-muted')}>
+        <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', engine === 'server' ? 'bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-200' : 'surface-muted text-muted')}>
           {engine === 'server' ? modelName(agent!.model) : 'Offline mode'}
         </span>
         <div className="ml-auto flex items-center">
@@ -180,7 +181,7 @@ export default function AssistantPanel() {
             className="max-h-40 min-h-[24px] flex-1 resize-none bg-transparent px-1 text-sm outline-none [field-sizing:content]"
           />
           {busy ? (
-            <button onClick={stop} className="rounded-lg bg-slate-900 p-1.5 text-white dark:bg-white dark:text-slate-900" aria-label="Stop">
+            <button onClick={stop} className="rounded-lg bg-stone-900 p-1.5 text-white dark:bg-white dark:text-stone-900" aria-label="Stop">
               <Square size={14} fill="currentColor" />
             </button>
           ) : (
@@ -195,7 +196,7 @@ export default function AssistantPanel() {
   )
 }
 
-function Message({ item, last, status, onTask, onDoc }: { item: ChatItem; last: boolean; status: string | null; onTask: (id: string) => void; onDoc: (id: string) => void }) {
+export function Message({ item, last, status, onTask, onDoc }: { item: ChatItem; last: boolean; status: string | null; onTask: (id: string) => void; onDoc: (id: string) => void }) {
   if (item.role === 'user')
     return (
       <div className="mt-4 flex justify-end">
@@ -204,7 +205,7 @@ function Message({ item, last, status, onTask, onDoc }: { item: ChatItem; last: 
     )
   return (
     <div className="mt-3 flex gap-2.5">
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-teal-400 text-white">
+      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white">
         <Sparkles size={12} />
       </span>
       <div className={cn('min-w-0 flex-1 text-sm leading-relaxed', item.error && 'text-red-600 dark:text-red-400')}>

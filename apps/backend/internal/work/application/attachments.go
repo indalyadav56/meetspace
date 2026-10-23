@@ -175,15 +175,20 @@ func (s *Service) StopTimer(ctx context.Context, ws, userID string) (*domain.Tim
 	if t == nil {
 		return nil, domain.ErrNoTimer
 	}
-	if err := s.repo.DeleteTimer(ctx, ws, userID); err != nil {
-		return nil, err
+	// Save the tracked time before removing the timer, so a failure (such as an
+	// approved week) leaves the timer running instead of losing the time.
+	if err := s.requireOpenWeek(ctx, ws, userID, t.Start); err != nil {
+		return nil, apperror.Conflict("timesheet_locked", "the timesheet for the week this timer started in is submitted or approved; reopen it to save this time — the timer keeps running")
 	}
-	s.pub.Publish(ctx, ws, "timer", "clear", nil, []string{userID})
 	minutes := int(math.Max(1, math.Round(s.now().Sub(t.Start).Minutes())))
 	e, err := s.AddTimeEntry(ctx, ws, userID, t.TaskID, t.Start, minutes, "")
 	if err != nil {
 		return nil, err
 	}
+	if err := s.repo.DeleteTimer(ctx, ws, userID); err != nil {
+		return nil, err
+	}
+	s.pub.Publish(ctx, ws, "timer", "clear", nil, []string{userID})
 	s.logActivity(ctx, ws, t.TaskID, userID, "tracked "+formatMinutes(minutes))
 	return e, nil
 }
@@ -206,6 +211,9 @@ func (s *Service) AddTimeEntry(ctx context.Context, ws, userID, taskID string, s
 	if _, err := s.repo.GetTask(ctx, ws, taskID); err != nil {
 		return nil, err
 	}
+	if err := s.requireOpenWeek(ctx, ws, userID, start); err != nil {
+		return nil, err
+	}
 	e := &domain.TimeEntry{TaskID: taskID, UserID: userID, Start: start, Duration: minutes, Note: strings.TrimSpace(note)}
 	if err := s.repo.CreateTimeEntry(ctx, ws, e); err != nil {
 		return nil, err
@@ -221,6 +229,9 @@ func (s *Service) UpdateTimeEntry(ctx context.Context, ws, userID, id string, mi
 	}
 	if e.UserID != userID {
 		return nil, apperror.Forbidden("not_your_entry", "you can only edit your own time entries")
+	}
+	if err := s.requireOpenWeek(ctx, ws, userID, e.Start); err != nil {
+		return nil, err
 	}
 	if minutes != nil {
 		if *minutes <= 0 || *minutes > 24*60 {
@@ -245,6 +256,9 @@ func (s *Service) DeleteTimeEntry(ctx context.Context, ws, userID, id string) er
 	}
 	if e.UserID != userID {
 		return apperror.Forbidden("not_your_entry", "you can only delete your own time entries")
+	}
+	if err := s.requireOpenWeek(ctx, ws, userID, e.Start); err != nil {
+		return err
 	}
 	if err := s.repo.DeleteTimeEntry(ctx, ws, id); err != nil {
 		return err

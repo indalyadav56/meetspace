@@ -32,12 +32,12 @@ export default function PublicForm() {
   }
 
   return (
-    <div className="min-h-full bg-slate-100 px-4 py-10 sm:py-16">
+    <div className="min-h-full bg-stone-100 px-4 py-10 sm:py-16">
       <div className="mx-auto max-w-xl">
-        {state === 'loading' && <div className="rounded-2xl bg-white p-10 text-center text-slate-500 shadow-xl">Loading form…</div>}
+        {state === 'loading' && <div className="rounded-2xl bg-white p-10 text-center text-stone-500 shadow-xl">Loading form…</div>}
         {state === 'ready' && form && <FormView form={form} onSubmit={submit} />}
-        {state === 'missing' && <div className="rounded-2xl bg-white p-10 text-center text-slate-700 shadow-xl">This form doesn’t exist or was deleted.</div>}
-        <p className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500">
+        {state === 'missing' && <div className="rounded-2xl bg-white p-10 text-center text-stone-700 shadow-xl">This form doesn’t exist or was deleted.</div>}
+        <p className="mt-6 flex items-center justify-center gap-2 text-xs text-stone-500">
           Powered by <Logo size={16} />
         </p>
       </div>

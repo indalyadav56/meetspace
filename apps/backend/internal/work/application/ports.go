@@ -15,6 +15,9 @@ type Notifier interface {
 // Members answers workspace membership questions.
 type Members interface {
 	IsMember(ctx context.Context, workspaceID, userID string) (bool, error)
+	MemberIDs(ctx context.Context, workspaceID string) ([]string, error)
+	// CanManage reports whether the user is an owner or admin (e.g. may approve timesheets).
+	CanManage(ctx context.Context, workspaceID, userID string) (bool, error)
 }
 
 // KeyAllocator reserves human-readable task numbers.

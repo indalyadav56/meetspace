@@ -24,7 +24,7 @@ export default function FormView({ form, onSubmit, preview }: { form: Form; onSu
   }
 
   const input = (f: FormField) => {
-    const cls = cn('mt-1.5 w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2', errors[f.id] ? 'border-red-400 focus:ring-red-100' : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-100')
+    const cls = cn('mt-1.5 w-full rounded-lg border bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:ring-2', errors[f.id] ? 'border-red-400 focus:ring-red-100' : 'border-stone-300 focus:border-brand-500 focus:ring-brand-100')
     const v = values[f.id] ?? ''
     const set = (x: string) => setValues((s) => ({ ...s, [f.id]: x }))
     switch (f.kind) {
@@ -43,7 +43,7 @@ export default function FormView({ form, onSubmit, preview }: { form: Form; onSu
         return (
           <div className="mt-1.5 flex flex-wrap gap-2">
             {PRIORITIES.map((p) => (
-              <button type="button" key={p.value} onClick={() => set(v === p.value ? '' : p.value)} className={cn('rounded-lg border px-3 py-1.5 text-sm', v === p.value ? 'border-transparent text-white' : 'border-slate-300 text-slate-700')} style={v === p.value ? { background: p.color } : undefined}>
+              <button type="button" key={p.value} onClick={() => set(v === p.value ? '' : p.value)} className={cn('rounded-lg border px-3 py-1.5 text-sm', v === p.value ? 'border-transparent text-white' : 'border-stone-300 text-stone-700')} style={v === p.value ? { background: p.color } : undefined}>
                 {p.label}
               </button>
             ))}
@@ -56,7 +56,7 @@ export default function FormView({ form, onSubmit, preview }: { form: Form; onSu
 
   if (done)
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl bg-white p-10 text-center text-slate-900 shadow-xl">
+      <div className="flex flex-col items-center gap-3 rounded-2xl bg-white p-10 text-center text-stone-900 shadow-xl">
         <CheckCircle2 size={44} style={{ color: form.color }} />
         <p className="text-lg font-semibold">{form.thanksText}</p>
         <button onClick={() => (setDone(false), setValues({}))} className="text-sm font-medium hover:underline" style={{ color: form.color }}>
@@ -79,13 +79,13 @@ export default function FormView({ form, onSubmit, preview }: { form: Form; onSu
           else setDone(true)
         })
       }}
-      className="overflow-hidden rounded-2xl bg-white text-slate-900 shadow-xl"
+      className="overflow-hidden rounded-2xl bg-white text-stone-900 shadow-xl"
     >
       <div className="h-2" style={{ background: form.color }} />
       <div className="space-y-5 p-6 sm:p-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{form.title || 'Untitled form'}</h1>
-          {form.description && <p className="mt-2 text-sm whitespace-pre-wrap text-slate-600">{form.description}</p>}
+          {form.description && <p className="mt-2 text-sm whitespace-pre-wrap text-stone-600">{form.description}</p>}
         </div>
         {form.fields.map((f) => (
           <label key={f.id} className="block">
@@ -93,7 +93,7 @@ export default function FormView({ form, onSubmit, preview }: { form: Form; onSu
               {f.label || 'Untitled question'}
               {f.required && <span className="text-red-500"> *</span>}
             </span>
-            {f.help && <span className="block text-xs text-slate-500">{f.help}</span>}
+            {f.help && <span className="block text-xs text-stone-500">{f.help}</span>}
             {input(f)}
             {errors[f.id] && <span className="mt-1 block text-xs text-red-500">{errors[f.id]}</span>}
           </label>

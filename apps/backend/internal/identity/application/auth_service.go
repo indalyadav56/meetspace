@@ -253,3 +253,26 @@ func hashToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }
+
+// inviteTTL is how long a "set your password" link from an invite stays valid.
+const inviteTTL = 7 * 24 * time.Hour
+
+// SendInvite emails someone who was just added to a workspace. People invited
+// before they had an account get a link to choose their password; everyone
+// else gets a link to log in.
+func (s *AuthService) SendInvite(ctx context.Context, email, inviterName, workspaceName string) error {
+	u, err := s.users.GetByEmail(ctx, normalizeEmail(email))
+	if err != nil {
+		return err
+	}
+	raw := ""
+	if strings.HasPrefix(u.PasswordHash, invitedHashPrefix) {
+		if raw, err = randomToken(refreshTokenBytes); err != nil {
+			return err
+		}
+		if err := s.resets.Create(ctx, &domain.PasswordResetToken{UserID: u.ID, TokenHash: hashToken(raw), ExpiresAt: s.now().Add(inviteTTL)}); err != nil {
+			return err
+		}
+	}
+	return s.email.SendWorkspaceInvite(ctx, u.Email, inviterName, workspaceName, raw)
+}

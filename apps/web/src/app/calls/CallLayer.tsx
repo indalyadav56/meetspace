@@ -88,7 +88,7 @@ export function VideoTile({
       <video ref={ref} autoPlay playsInline muted className={cn('h-full w-full', contain ? 'object-contain' : 'object-cover', mirror && 'scale-x-[-1]', !hasVideo && 'hidden')} />
       {!muted && <audio ref={audioRef} autoPlay />}
       {!hasVideo && (
-        <span className={cn('flex items-center justify-center rounded-full font-bold text-white', speaking && 'animate-pulse')} style={{ background: user?.color ?? '#4f46e5', width: big ? 120 : 72, height: big ? 120 : 72, fontSize: big ? 44 : 26 }}>
+        <span className={cn('flex items-center justify-center rounded-full font-bold text-white', speaking && 'animate-pulse')} style={{ background: user?.color ?? '#0b7f71', width: big ? 120 : 72, height: big ? 120 : 72, fontSize: big ? 44 : 26 }}>
           {(user?.name ?? '?')
             .split(' ')
             .map((p) => p[0])
@@ -101,7 +101,7 @@ export function VideoTile({
         <span className="truncate">{label ?? user?.name ?? 'Guest'}</span>
       </span>
       {hand && (
-        <span className="absolute top-2 left-2 flex items-center gap-1 rounded-md bg-amber-400 px-2 py-1 text-xs font-semibold text-slate-900">
+        <span className="absolute top-2 left-2 flex items-center gap-1 rounded-md bg-amber-400 px-2 py-1 text-xs font-semibold text-stone-900">
           <Hand size={12} /> Hand raised
         </span>
       )}
@@ -214,7 +214,7 @@ function ControlButton({ on, danger, onClick, label, children, active }: { on?: 
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={cn('flex flex-col items-center gap-1 rounded-xl px-2.5 py-1.5 text-[10px] font-medium sm:px-3', danger ? 'bg-red-500 hover:bg-red-600' : active ? 'bg-indigo-500 hover:bg-indigo-600' : on === false ? 'bg-red-500/90 hover:bg-red-500' : 'hover:bg-white/10')}
+      className={cn('flex flex-col items-center gap-1 rounded-xl px-2.5 py-1.5 text-[10px] font-medium sm:px-3', danger ? 'bg-red-500 hover:bg-red-600' : active ? 'bg-brand-500 hover:bg-brand-600' : on === false ? 'bg-red-500/90 hover:bg-red-500' : 'hover:bg-white/10')}
     >
       {children}
       <span className="hidden sm:block">{label}</span>

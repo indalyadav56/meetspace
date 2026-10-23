@@ -6,6 +6,15 @@ import type { ToolEffect } from './tools'
 import { uid } from '../../lib/utils'
 import { api, API_BASE, ensureFreshToken } from '../../api/client'
 
+/** A saved agent: a name plus standing instructions, stored per workspace. */
+export interface SavedAgent {
+  id: string
+  name: string
+  description: string
+  instructions: string
+  icon: string
+}
+
 export interface ChatItem {
   id: string
   role: 'user' | 'assistant'
@@ -27,6 +36,8 @@ interface AssistantState {
   items: ChatItem[]
   /** ADK session id, so follow-up questions keep the conversation. */
   sessionId: string | null
+  /** Saved agent the conversation runs as (its instructions shape every answer). */
+  persona: SavedAgent | null
   busy: boolean
   status: string | null
   workspaceId: string | null
@@ -34,7 +45,10 @@ interface AssistantState {
   abort: AbortController | null
   setOpen: (open: boolean) => void
   loadAgent: () => Promise<void>
-  ask: (prompt: string) => void
+  /** Asks a question; `panel: false` keeps the side panel closed (the AI page shows the conversation). */
+  ask: (prompt: string, opts?: { panel?: boolean }) => void
+  /** Starts a new conversation with a saved agent (or the default assistant). */
+  choosePersona: (agent: SavedAgent | null) => void
   stop: () => void
   reset: () => void
 }
@@ -125,12 +139,17 @@ export const useAssistant = create<AssistantState>()((set, get) => {
         set({ agent: { enabled: false, model: '' } })
       }
     },
+    persona: null,
+    choosePersona: (persona) => {
+      get().abort?.abort()
+      set({ persona, items: [], sessionId: null, busy: false, status: null, abort: null })
+    },
     reset: () => {
       get().abort?.abort()
       set({ items: [], sessionId: null, busy: false, status: null, abort: null })
     },
     stop: () => get().abort?.abort(),
-    ask: async (prompt) => {
+    ask: async (prompt, opts) => {
       const text = prompt.trim()
       if (!text || get().busy) return
       const s = useStore.getState()
@@ -141,7 +160,7 @@ export const useAssistant = create<AssistantState>()((set, get) => {
       }
       const engine = get().agent?.enabled ? 'server' : 'local'
       set((st) => ({
-        open: true,
+        open: opts?.panel === false ? st.open : true,
         busy: true,
         items: [...st.items, { id: uid('q'), role: 'user', text, effects: [] }, { id: uid('a'), role: 'assistant', text: '', effects: [], engine, pending: true }],
       }))
@@ -162,7 +181,7 @@ export const useAssistant = create<AssistantState>()((set, get) => {
       const abort = new AbortController()
       set({ abort, status: 'Thinking' })
       try {
-        for await (const ev of streamTurn(s.currentWorkspaceId, { message: text, sessionId: get().sessionId ?? '', context: describeContext() }, abort.signal)) {
+        for await (const ev of streamTurn(s.currentWorkspaceId, { message: text, sessionId: get().sessionId ?? '', context: describeContext(), agentId: get().persona?.id ?? '' }, abort.signal)) {
           if (ev.sessionId) set({ sessionId: ev.sessionId })
           switch (ev.type) {
             case 'text':

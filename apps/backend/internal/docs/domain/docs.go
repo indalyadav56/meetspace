@@ -26,6 +26,7 @@ type Whiteboard struct {
 	Title       string          `json:"title"`
 	Items       json.RawMessage `json:"items"`
 	CreatedBy   string          `json:"createdBy"`
+	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
 }
 

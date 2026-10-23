@@ -4,7 +4,7 @@ import { Check, ChevronDown, Minus } from 'lucide-react'
 import { MarketingFooter, MarketingNav } from './Chrome'
 import { cn } from '../lib/utils'
 
-const PLANS = [
+export const PLANS = [
   { name: 'Free', monthly: 0, yearly: 0, tagline: 'For individuals and tiny teams getting organised.', cta: 'Get started', features: ['Unlimited tasks', 'Up to 5 members', 'List, Board & Calendar views', '100 MB storage', 'Docs & Inbox'] },
   { name: 'Team', monthly: 10, yearly: 8, tagline: 'For growing teams that need more views and control.', cta: 'Start free trial', popular: true, features: ['Everything in Free', 'Unlimited members', 'Gantt & Table views', 'Dashboards', 'Unlimited storage', 'Guests & permissions'] },
   { name: 'Business', monthly: 18, yearly: 14, tagline: 'For departments running many projects at once.', cta: 'Start free trial', features: ['Everything in Team', 'Automations (10k runs/mo)', 'Workload & time tracking', 'Advanced reporting', 'Priority support'] },
@@ -51,26 +51,26 @@ const FAQ = [
 ]
 
 function CellView({ v }: { v: Cell }) {
-  if (v === true) return <Check size={18} className="mx-auto text-indigo-600" />
-  if (v === false) return <Minus size={18} className="mx-auto text-slate-300" />
-  return <span className="text-sm text-slate-700">{v}</span>
+  if (v === true) return <Check size={18} className="mx-auto text-brand-600" />
+  if (v === false) return <Minus size={18} className="mx-auto text-stone-300" />
+  return <span className="text-sm text-stone-700">{v}</span>
 }
 
 export default function Pricing() {
   const [yearly, setYearly] = useState(true)
   const [faq, setFaq] = useState<number | null>(0)
   return (
-    <div className="bg-white text-slate-950">
+    <div className="bg-white text-stone-950">
       <MarketingNav />
       <main>
         <section className="mx-auto max-w-[1280px] px-4 pt-16 text-center sm:px-6 sm:pt-24 lg:px-10">
           <h1 className="text-5xl font-bold tracking-[-0.04em] sm:text-7xl">Simple pricing that scales with you</h1>
-          <p className="mx-auto mt-5 max-w-xl text-lg text-slate-600">Start free. Pay per member when your team needs more.</p>
-          <div className="mt-10 inline-flex items-center rounded-full bg-slate-100 p-1 text-sm font-semibold">
+          <p className="mx-auto mt-5 max-w-xl text-lg text-stone-600">Start free. Pay per member when your team needs more.</p>
+          <div className="mt-10 inline-flex items-center rounded-full bg-stone-100 p-1 text-sm font-semibold">
             {[false, true].map((y) => (
-              <button key={String(y)} onClick={() => setYearly(y)} className={cn('rounded-full px-4 py-2 transition', yearly === y ? 'bg-white shadow' : 'text-slate-500')}>
+              <button key={String(y)} onClick={() => setYearly(y)} className={cn('rounded-full px-4 py-2 transition', yearly === y ? 'bg-white shadow' : 'text-stone-500')}>
                 {y ? 'Yearly' : 'Monthly'}
-                {y && <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[11px] text-teal-700">Save 20%</span>}
+                {y && <span className="ml-2 rounded-full bg-accent-100 px-2 py-0.5 text-[11px] text-accent-700">Save 20%</span>}
               </button>
             ))}
           </div>
@@ -83,32 +83,32 @@ export default function Pricing() {
               <div
                 key={p.name}
                 id={p.name === 'Enterprise' ? 'enterprise' : undefined}
-                className={cn('relative flex flex-col rounded-3xl border p-7', p.popular ? 'border-indigo-600 shadow-xl ring-1 ring-indigo-600' : 'border-slate-200')}
+                className={cn('relative flex flex-col rounded-3xl border p-7', p.popular ? 'border-brand-600 shadow-xl ring-1 ring-brand-600' : 'border-stone-200')}
               >
-                {p.popular && <span className="absolute -top-3 left-7 rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white">Most popular</span>}
+                {p.popular && <span className="absolute -top-3 left-7 rounded-full bg-brand-600 px-3 py-1 text-xs font-bold text-white">Most popular</span>}
                 <h2 className="text-xl font-bold">{p.name}</h2>
-                <p className="mt-2 min-h-[48px] text-sm text-slate-600">{p.tagline}</p>
+                <p className="mt-2 min-h-[48px] text-sm text-stone-600">{p.tagline}</p>
                 <div className="mt-6 flex items-end gap-1">
                   {price === null ? (
                     <span className="text-4xl font-bold">Custom</span>
                   ) : (
                     <>
                       <span className="text-5xl font-bold tracking-tight">${price}</span>
-                      <span className="mb-1.5 text-sm text-slate-500">/member/mo</span>
+                      <span className="mb-1.5 text-sm text-stone-500">/member/mo</span>
                     </>
                   )}
                 </div>
-                <p className="mt-1 h-5 text-xs text-slate-500">{price ? (yearly ? 'billed yearly' : 'billed monthly') : ''}</p>
+                <p className="mt-1 h-5 text-xs text-stone-500">{price ? (yearly ? 'billed yearly' : 'billed monthly') : ''}</p>
                 <Link
                   to={p.name === 'Enterprise' ? '/pricing#enterprise' : '/signup'}
-                  className={cn('mt-6 rounded-xl py-3 text-center font-semibold transition', p.popular ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-950 text-white hover:bg-slate-800')}
+                  className={cn('mt-6 rounded-xl py-3 text-center font-semibold transition', p.popular ? 'bg-brand-600 text-white hover:bg-brand-700' : 'bg-stone-950 text-white hover:bg-stone-800')}
                 >
                   {p.cta}
                 </Link>
                 <ul className="mt-7 space-y-3 text-sm">
                   {p.features.map((f) => (
                     <li key={f} className="flex gap-2.5">
-                      <Check size={17} className="mt-px shrink-0 text-indigo-600" /> {f}
+                      <Check size={17} className="mt-px shrink-0 text-brand-600" /> {f}
                     </li>
                   ))}
                 </ul>
@@ -122,7 +122,7 @@ export default function Pricing() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-left">
               <thead className="sticky top-16 bg-white">
-                <tr className="border-b border-slate-200">
+                <tr className="border-b border-stone-200">
                   <th className="py-4 font-semibold" />
                   {PLANS.map((p) => (
                     <th key={p.name} className="py-4 text-center font-semibold">
@@ -135,12 +135,12 @@ export default function Pricing() {
                 {MATRIX.map((g) => (
                   <Fragment key={g.group}>
                     <tr>
-                      <td colSpan={5} className="pt-8 pb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase">
+                      <td colSpan={5} className="pt-8 pb-2 text-xs font-semibold tracking-wide text-stone-400 uppercase">
                         {g.group}
                       </td>
                     </tr>
                     {g.rows.map(([label, ...cells]) => (
-                      <tr key={label} className="border-b border-slate-100">
+                      <tr key={label} className="border-b border-stone-100">
                         <td className="py-3.5 text-sm font-medium">{label}</td>
                         {cells.map((c, i) => (
                           <td key={i} className="py-3.5 text-center">
@@ -158,14 +158,14 @@ export default function Pricing() {
 
         <section className="mx-auto mt-24 mb-24 max-w-3xl px-4 sm:px-6">
           <h2 className="mb-8 text-center text-3xl font-bold tracking-tight">Frequently asked questions</h2>
-          <div className="divide-y divide-slate-200 border-y border-slate-200">
+          <div className="divide-y divide-stone-200 border-y border-stone-200">
             {FAQ.map(([q, a], i) => (
               <div key={q}>
                 <button onClick={() => setFaq(faq === i ? null : i)} className="flex w-full items-center justify-between gap-4 py-5 text-left text-lg font-semibold" aria-expanded={faq === i}>
                   {q}
                   <ChevronDown size={20} className={cn('shrink-0 transition-transform', faq === i && 'rotate-180')} />
                 </button>
-                {faq === i && <p className="animate-fade-up pb-5 text-slate-600 [animation-duration:.2s]">{a}</p>}
+                {faq === i && <p className="animate-fade-up pb-5 text-stone-600 [animation-duration:.2s]">{a}</p>}
               </div>
             ))}
           </div>

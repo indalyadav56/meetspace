@@ -4,6 +4,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/indalyadav56/meetspace/backend/internal/workspace/domain"
@@ -32,7 +33,7 @@ func (r *Repository) Create(ctx context.Context, w *domain.Workspace, owner stri
 }
 
 func (r *Repository) members(ctx context.Context, id string) ([]domain.Member, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT user_id, role, invited FROM workspace.members WHERE workspace_id=$1 ORDER BY created_at`, id)
+	rows, err := r.db.QueryContext(ctx, `SELECT user_id, role, invited, title, manager_id FROM workspace.members WHERE workspace_id=$1 ORDER BY created_at`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +41,7 @@ func (r *Repository) members(ctx context.Context, id string) ([]domain.Member, e
 	var out []domain.Member
 	for rows.Next() {
 		var m domain.Member
-		if err := rows.Scan(&m.UserID, &m.Role, &m.Invited); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Role, &m.Invited, &m.Title, &m.ManagerID); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -63,6 +64,23 @@ func (r *Repository) Get(ctx context.Context, id string) (*domain.Workspace, err
 		return nil, err
 	}
 	return &w, nil
+}
+
+func (r *Repository) AllIDs(ctx context.Context) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT id FROM workspace.workspaces WHERE deleted_at IS NULL ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (r *Repository) ListForUser(ctx context.Context, userID string) ([]domain.Workspace, error) {
@@ -139,4 +157,97 @@ func (r *Repository) NextTaskKey(ctx context.Context, workspaceID string) (int64
 	err := r.db.QueryRowContext(ctx,
 		`UPDATE workspace.workspaces SET next_task_key = next_task_key + 1 WHERE id=$1 RETURNING next_task_key - 1`, workspaceID).Scan(&k)
 	return k, err
+}
+
+func (r *Repository) SetMemberProfile(ctx context.Context, workspaceID, userID, title string, managerID *string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE workspace.members SET title=$3, manager_id=$4 WHERE workspace_id=$1 AND user_id=$2`, workspaceID, userID, title, managerID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrNotMember
+	}
+	return nil
+}
+
+const teamCols = `t.id, t.name, t.color, t.description, t.lead_id, COALESCE(t.created_by::text, ''), t.created_at, t.updated_at,
+	COALESCE((SELECT json_agg(tm.user_id ORDER BY tm.user_id) FROM workspace.team_members tm WHERE tm.team_id = t.id), '[]')::text`
+
+func scanTeam(sc interface{ Scan(...any) error }, t *domain.Team) error {
+	var members string
+	if err := sc.Scan(&t.ID, &t.Name, &t.Color, &t.Description, &t.LeadID, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt, &members); err != nil {
+		return err
+	}
+	t.Members = []string{}
+	return json.Unmarshal([]byte(members), &t.Members)
+}
+
+func (r *Repository) ListTeams(ctx context.Context, workspaceID string) ([]domain.Team, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT `+teamCols+` FROM workspace.teams t WHERE t.workspace_id=$1 ORDER BY t.name`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.Team{}
+	for rows.Next() {
+		t := domain.Team{WorkspaceID: workspaceID}
+		if err := scanTeam(rows, &t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) GetTeam(ctx context.Context, workspaceID, id string) (*domain.Team, error) {
+	t := domain.Team{WorkspaceID: workspaceID}
+	err := scanTeam(r.db.QueryRowContext(ctx, `SELECT `+teamCols+` FROM workspace.teams t WHERE t.workspace_id=$1 AND t.id=$2`, workspaceID, id), &t)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.ErrTeamNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *Repository) SaveTeam(ctx context.Context, t *domain.Team) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := tx.QueryRowContext(ctx, `
+		INSERT INTO workspace.teams (id, workspace_id, name, color, description, lead_id, created_by)
+		VALUES (COALESCE(NULLIF($1, '')::uuid, uuidv7()), $2, $3, $4, $5, $6, NULLIF($7, '')::uuid)
+		ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, color=EXCLUDED.color, description=EXCLUDED.description, lead_id=EXCLUDED.lead_id, updated_at=now()
+		WHERE workspace.teams.workspace_id = EXCLUDED.workspace_id
+		RETURNING id`,
+		t.ID, t.WorkspaceID, t.Name, t.Color, t.Description, t.LeadID, t.CreatedBy).Scan(&t.ID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ErrTeamNotFound
+		}
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace.team_members WHERE team_id=$1`, t.ID); err != nil {
+		return err
+	}
+	if len(t.Members) > 0 {
+		ids, _ := json.Marshal(t.Members)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO workspace.team_members (team_id, user_id) SELECT $1, x::uuid FROM jsonb_array_elements_text($2::jsonb) x ON CONFLICT DO NOTHING`, t.ID, string(ids)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (r *Repository) DeleteTeam(ctx context.Context, workspaceID, id string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM workspace.teams WHERE workspace_id=$1 AND id=$2`, workspaceID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrTeamNotFound
+	}
+	return nil
 }
