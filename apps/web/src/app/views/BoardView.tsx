@@ -20,8 +20,24 @@ import { AvatarStack, PriorityFlag, StatusDot, Tag } from '../components/ui'
 import { cn, friendlyDate, isOverdue } from '../../lib/utils'
 import type { ViewProps } from './ListView'
 
-export default function BoardView({ tasks, statuses, defaultListId }: ViewProps) {
+/** In a cross-space board the columns are status types; find the task's own status of that type. */
+function useRealStatus() {
+  const r = useTaskResolver()
+  const all = useStore((s) => s.tasks)
+  const lists = useStore((s) => s.lists)
+  const spaces = useStore((s) => s.spaces)
+  return (virtualId: ID, taskId: ID | null, listId?: ID) => {
+    const type = virtualId.replace(/^v-/, '')
+    const t = taskId ? all.find((x) => x.id === taskId) : undefined
+    const space = t ? r.spaceOf(t) : spaces.find((sp) => sp.id === lists.find((l) => l.id === listId)?.spaceId)
+    return space?.statuses.find((st) => st.type === type)?.id ?? null
+  }
+}
+
+export default function BoardView({ tasks, statuses, defaultListId, mixed }: ViewProps) {
   const moveTask = useStore((s) => s.moveTask)
+  const updateTask = useStore((s) => s.updateTask)
+  const realStatus = useRealStatus()
   const [activeId, setActiveId] = useState<ID | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
   const active = tasks.find((t) => t.id === activeId)
@@ -32,8 +48,17 @@ export default function BoardView({ tasks, statuses, defaultListId }: ViewProps)
     if (!over) return
     const overId = String(over.id)
     const col = statuses.find((s) => s.id === overId)
-    if (col) return moveTask(String(active.id), col.id, null)
     const overTask = tasks.find((t) => t.id === overId)
+    if (mixed) {
+      // Cross-space: change the status type; order within a column stays manual per List.
+      const target = col?.id ?? overTask?.statusId
+      const dragged = tasks.find((t) => t.id === active.id)
+      if (!target || target === dragged?.statusId) return
+      const real = realStatus(target, String(active.id))
+      if (real) updateTask(String(active.id), { statusId: real })
+      return
+    }
+    if (col) return moveTask(String(active.id), col.id, null)
     if (overTask && overTask.id !== active.id) moveTask(String(active.id), overTask.statusId, overTask.id)
   }
 
@@ -41,7 +66,7 @@ export default function BoardView({ tasks, statuses, defaultListId }: ViewProps)
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))} onDragEnd={onEnd} onDragCancel={() => setActiveId(null)}>
       <div className="flex h-full gap-3 overflow-x-auto p-4 scroll-thin">
         {statuses.map((st) => (
-          <Column key={st.id} status={st} tasks={tasks.filter((t) => t.statusId === st.id)} listId={defaultListId} />
+          <Column key={st.id} status={st} tasks={tasks.filter((t) => t.statusId === st.id)} listId={defaultListId} realStatusId={mixed ? realStatus(st.id, null, defaultListId) : st.id} />
         ))}
       </div>
       <DragOverlay>{active ? <Card task={active} overlay /> : null}</DragOverlay>
@@ -49,7 +74,7 @@ export default function BoardView({ tasks, statuses, defaultListId }: ViewProps)
   )
 }
 
-function Column({ status, tasks, listId }: { status: Status; tasks: Task[]; listId: ID }) {
+function Column({ status, tasks, listId, realStatusId }: { status: Status; tasks: Task[]; listId: ID; realStatusId: ID | null }) {
   const { setNodeRef, isOver } = useDroppable({ id: status.id })
   const addTask = useStore((s) => s.addTask)
   const [adding, setAdding] = useState(false)
@@ -75,7 +100,7 @@ function Column({ status, tasks, listId }: { status: Status; tasks: Task[]; list
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              if (v.trim()) addTask({ listId, statusId: status.id, title: v.trim() })
+              if (v.trim()) addTask({ listId, ...(realStatusId ? { statusId: realStatusId } : {}), title: v.trim() })
               setV('')
             }}
             className="surface border-brand-500 rounded-lg border p-2"
@@ -101,8 +126,10 @@ function SortableCard({ task }: { task: Task }) {
   )
 }
 
-function Card({ task, overlay }: { task: Task; overlay?: boolean }) {
+function Card({ task: shown, overlay }: { task: Task; overlay?: boolean }) {
   const openTask = useStore((s) => s.openTask)
+  // Cross-space boards pass tasks re-keyed onto virtual statuses; show the real one.
+  const task = useStore((s) => s.tasks.find((t) => t.id === shown.id)) ?? shown
   const comments = useStore((s) => s.comments.filter((c) => c.taskId === task.id).length)
   const subCount = useSubtaskCounts().get(task.id) ?? 0
   const r = useTaskResolver()

@@ -36,6 +36,8 @@ export interface ViewProps {
   statuses: Status[]
   defaultListId: ID
   showList?: boolean
+  /** Tasks span several spaces; `statuses` are the virtual per-type statuses. */
+  mixed?: boolean
   /** Key the List view saves its layout under (grouping, columns). */
   viewKey?: ID
   /** List whose custom fields can be shown as columns. */

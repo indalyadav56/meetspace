@@ -48,7 +48,7 @@ export default function ViewHost({
   const filters = useStore((s) => s.filters)
   const r = useTaskResolver()
 
-  const available = mixed ? VIEW_META.filter((v) => v.kind !== 'board') : VIEW_META
+  const available = VIEW_META
   const active = available.some((v) => v.kind === view) ? view : 'list'
 
   const tasks = useMemo(() => {
@@ -60,9 +60,10 @@ export default function ViewHost({
 
   // In mixed mode the view gets virtual tasks; status edits must target real ids, so look them up.
   const real = useMemo(() => new Map(sourceTasks.map((t) => [t.id, t])), [sourceTasks])
-  const viewTasks = active === 'list' || !mixed ? tasks : tasks.map((t) => real.get(t.id)!)
+  // List and Board group by the virtual status types; the other views need real tasks.
+  const viewTasks = active === 'list' || active === 'board' || !mixed ? tasks : tasks.map((t) => real.get(t.id)!)
 
-  const props = { tasks: viewTasks, statuses, defaultListId, showList: mixed }
+  const props = { tasks: viewTasks, statuses, defaultListId, showList: mixed, mixed, viewKey }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
