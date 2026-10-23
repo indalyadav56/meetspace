@@ -93,6 +93,14 @@ body {
   border-radius: 8px;
 }
 
+/* Scrolls without showing a scrollbar (the narrow icon rail). */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Rich text editor */
 .prose-doc {
   outline: none;
@@ -193,14 +201,6 @@ body {
 .animate-fade-up {
   animation: fade-up 0.6s ease both;
 }
-@keyframes marquee {
-  to {
-    transform: translateX(-50%);
-  }
-}
-.animate-marquee {
-  animation: marquee 40s linear infinite;
-}
 @keyframes float-up {
   0% {
     opacity: 0;
@@ -216,7 +216,6 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .animate-marquee,
   .animate-fade-up {
     animation: none;
   }

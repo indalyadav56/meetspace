@@ -254,7 +254,7 @@ export function MarketingFooter() {
           ))}
         </div>
         <div className="mt-14 flex flex-col gap-4 border-t border-slate-800 pt-8 text-xs sm:flex-row sm:items-center">
-          <span>© {new Date().getFullYear()} Meetspace. A demo product.</span>
+          <span>© {new Date().getFullYear()} Meetspace. All rights reserved.</span>
           <div className="flex gap-5 sm:ml-auto">
             <a href="#" className="hover:text-white">
               Privacy

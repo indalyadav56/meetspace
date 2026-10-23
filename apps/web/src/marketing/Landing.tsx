@@ -296,25 +296,6 @@ function ProductDemo() {
 
 /* ---------- Sections ---------- */
 
-const LOGOS = ['Northwind', 'Lumen&Co', 'Bluepeak', 'Orbitly', 'Fernway', 'Quarry', 'Halcyon', 'Mosaic Labs', 'Tidewater', 'Kestrel']
-
-function LogoStrip() {
-  return (
-    <section className="py-14">
-      <p className="mb-8 text-center text-sm font-medium text-slate-500">Trusted by fast-moving teams of every size</p>
-      <div className="relative overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_10%,#000_90%,transparent)]">
-        <div className="animate-marquee flex w-max gap-16">
-          {[...LOGOS, ...LOGOS].map((l, i) => (
-            <span key={i} className="text-2xl font-bold tracking-tight whitespace-nowrap text-slate-300">
-              {l}
-            </span>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
 const PROBLEM_TABS = [
   { key: 'Tasks', title: 'Every task has an owner and a date', body: 'Break big goals into tasks and subtasks, set priorities, and see exactly who is doing what by when — in any view your team prefers.', icon: List },
   { key: 'Docs', title: 'Specs that live next to the work', body: 'Write briefs, notes and handbooks with a fast editor. Link them to the tasks they describe so context is never more than a click away.', icon: FileText },
@@ -603,7 +584,6 @@ export default function Landing() {
           </div>
         </section>
         <ProductDemo />
-        <LogoStrip />
         <ProblemSection />
         <AssistSection />
         <TeamsSection />

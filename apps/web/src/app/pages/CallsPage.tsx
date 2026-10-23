@@ -35,7 +35,7 @@ export default function CallsPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto scroll-thin">
+    <div className="@container h-full overflow-y-auto scroll-thin">
       <div className="mx-auto max-w-5xl p-4 sm:p-6">
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <PhoneCall size={20} className="text-brand-600" />
@@ -43,7 +43,7 @@ export default function CallsPage() {
           <span className="text-muted text-sm">You’re calling as {me?.name}</span>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 @2xl:grid-cols-3">
           <button
             onClick={() => void call.prepare({ title: `${me?.name.split(' ')[0]}’s meeting`, kind: 'video', channelId: null, meetingId: null, invitees: [] })}
             className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-500 p-5 text-left text-white shadow-sm transition hover:shadow-md"

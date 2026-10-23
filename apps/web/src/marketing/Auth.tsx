@@ -96,4 +96,3 @@ function AuthShell({ mode }: { mode: 'login' | 'signup' }) {
 }
 
 export const LoginPage = () => <AuthShell mode="login" />
-export const SignupPage = () => <AuthShell mode="signup" />

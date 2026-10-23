@@ -145,7 +145,7 @@ function Members({ canManage }: { canManage: boolean }) {
               Invite
             </button>
           </div>
-          <p className="text-faint mt-2 text-xs">Demo: invites add the person to this workspace right away; no email is sent.</p>
+          <p className="text-faint mt-2 text-xs">Invited people get access right away. New accounts set their password with “Forgot password” on the login page.</p>
         </form>
       )}
       <div className="border-app overflow-hidden rounded-xl border">

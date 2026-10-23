@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { ClipboardList, FileText, Film, Home, Inbox, PhoneCall, Zap, LayoutDashboard, Layers, MessagesSquare, PenTool, Timer, Trophy, Workflow } from 'lucide-react'
+import { ClipboardList, FileText, Film, Home, Inbox, Zap, LayoutDashboard, Layers, MessagesSquare, PenTool, Timer, Trophy, Workflow } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { useUnreadChat } from './pages/ChatPage'
 import { cn } from '../lib/utils'
@@ -8,7 +8,6 @@ const items = [
   { to: '/app/home', label: 'Home', icon: Home },
   { to: '/app/inbox', label: 'Inbox', icon: Inbox },
   { to: '/app/chat', label: 'Chat', icon: MessagesSquare },
-  { to: '/app/calls', label: 'Calls', icon: PhoneCall },
   { to: '/app/everything', label: 'Projects', icon: Layers },
   { to: '/app/docs', label: 'Docs', icon: FileText },
   { to: '/app/whiteboards', label: 'Boards', icon: PenTool },
@@ -24,9 +23,10 @@ const items = [
 export default function Rail({ mobile = false }: { mobile?: boolean }) {
   const unread = useStore((s) => s.notifications.filter((n) => !n.read && !n.cleared).length)
   const chatUnread = [...useUnreadChat().values()].reduce((a, b) => a + b, 0)
+  const liveCalls = useStore((s) => s.callLogs.filter((c) => !c.endedAt && c.liveParticipants?.length).length)
   const badge = (label: string) => (label === 'Inbox' ? unread : label === 'Chat' ? chatUnread : 0)
   return (
-    <nav className={cn('scroll-thin w-[68px] shrink-0 flex-col items-center gap-0.5 overflow-y-auto py-2', mobile ? 'flex bg-[var(--rail)]' : 'hidden md:flex')} aria-label="Primary">
+    <nav className={cn('no-scrollbar w-[68px] shrink-0 flex-col items-center gap-0.5 overflow-y-auto py-2', mobile ? 'flex bg-[var(--rail)]' : 'hidden md:flex')} aria-label="Primary">
       {items.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
@@ -47,6 +47,7 @@ export default function Rail({ mobile = false }: { mobile?: boolean }) {
               </span>
               {label}
               {badge(label) > 0 && <span className="absolute top-0 right-2 rounded-full bg-red-500 px-1 text-[9px] leading-4 font-bold text-white">{badge(label)}</span>}
+              {label === 'Chat' && liveCalls > 0 && !badge(label) && <span className="absolute top-0.5 right-3 h-2.5 w-2.5 rounded-full border-2 border-[var(--rail,white)] bg-emerald-500" title="A call is live" />}
             </>
           )}
         </NavLink>

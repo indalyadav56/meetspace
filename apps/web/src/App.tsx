@@ -3,7 +3,8 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useStore } from './store/useStore'
 import Landing from './marketing/Landing'
 import Pricing from './marketing/Pricing'
-import { LoginPage, SignupPage } from './marketing/Auth'
+import { LoginPage } from './marketing/Auth'
+import SignupPage from './marketing/Signup'
 import AppLayout from './app/AppLayout'
 import Home from './app/pages/Home'
 import Inbox from './app/pages/Inbox'
@@ -12,12 +13,11 @@ import Dashboards from './app/pages/Dashboards'
 import ListPage from './app/pages/ListPage'
 import SpacePage from './app/pages/SpacePage'
 import Everything from './app/pages/Everything'
-import ChatPage from './app/pages/ChatPage'
+import ChatPage, { ChatCalls } from './app/pages/ChatPage'
 import WhiteboardsPage from './app/pages/WhiteboardsPage'
 import GoalsPage from './app/pages/GoalsPage'
 import TimesheetsPage from './app/pages/TimesheetsPage'
 import AutomationsPage from './app/pages/AutomationsPage'
-import CallsPage from './app/pages/CallsPage'
 import ClipsPage from './app/pages/ClipsPage'
 import FormsPage from './app/pages/FormsPage'
 import SprintsPage from './app/pages/SprintsPage'
@@ -96,13 +96,14 @@ export default function App() {
         <Route path="dashboards" element={<Dashboards />} />
         <Route path="everything" element={<Everything />} />
         <Route path="chat" element={<ChatPage />} />
+        <Route path="chat/calls" element={<ChatCalls />} />
         <Route path="chat/:channelId" element={<ChatPage />} />
         <Route path="whiteboards" element={<WhiteboardsPage />} />
         <Route path="whiteboards/:boardId" element={<WhiteboardsPage />} />
         <Route path="goals" element={<GoalsPage />} />
         <Route path="timesheets" element={<TimesheetsPage />} />
         <Route path="automations" element={<AutomationsPage />} />
-        <Route path="calls" element={<CallsPage />} />
+        <Route path="calls" element={<Navigate to="/app/chat/calls" replace />} />
         <Route path="clips" element={<ClipsPage />} />
         <Route path="forms" element={<FormsPage />} />
         <Route path="sprints" element={<SprintsPage />} />

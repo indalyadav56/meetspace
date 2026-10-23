@@ -38,6 +38,7 @@ import type {
 import { api, ApiError, newId, onWriteError, session, type Tokens } from '../api/client'
 import { RealtimeConnection, emitRealtime, type RealtimeEvent } from '../api/realtime'
 import { SPACE_COLORS, toISODate } from '../lib/utils'
+import { LIST_TEMPLATES } from './templates'
 
 export interface Filters {
   search: string
@@ -122,7 +123,10 @@ interface State {
   openTaskId: ID | null
 
   signIn: (email: string, password: string) => Promise<void>
+  /** Creates the account and signs in, without loading a workspace (onboarding creates it next). */
   signUp: (name: string, email: string, password: string) => Promise<void>
+  /** Final onboarding step: creates the user's first workspace, invites teammates and adds starter Lists. */
+  setupWorkspace: (opts: { name: string; color: string; invites: string[]; templates: string[] }) => Promise<void>
   bootstrap: () => Promise<void>
   reload: () => Promise<void>
   toast: (text: string, tone?: Toast['tone']) => void
@@ -501,10 +505,10 @@ export const useStore = create<State>()(
         connect(id)
       }
 
-      const startSession = async (t: Tokens, user: User) => {
+      const startSession = async (t: Tokens, user: User, load = true) => {
         session.set({ accessToken: t.accessToken, refreshToken: t.refreshToken })
         set({ signedIn: true, currentUserId: user.id, users: [user] })
-        await get().bootstrap()
+        if (load) await get().bootstrap()
       }
 
       return {
@@ -533,7 +537,16 @@ export const useStore = create<State>()(
         },
         signUp: async (name, email, password) => {
           const r = await api.raw<{ user: User; tokens: Tokens }>('POST', '/auth/register', { body: { fullName: name, email, password }, anonymous: true })
-          await startSession(r.tokens, r.user)
+          await startSession(r.tokens, r.user, false)
+        },
+        setupWorkspace: async ({ name, color, invites, templates }) => {
+          const ws = await api.post<Workspace>('/workspaces', { id: newId(), name, color })
+          set({ currentWorkspaceId: ws.id })
+          // Invites that fail (e.g. a typo'd address) shouldn't block getting into the app.
+          await Promise.allSettled(invites.map((email) => api.post(`/workspaces/${ws.id}/members`, { email, role: 'member' })))
+          await get().bootstrap()
+          const space = get().spaces[0]
+          if (space) for (const key of templates) get().applyTemplate(space.id, key, LIST_TEMPLATES.find((t) => t.key === key)?.name ?? key)
         },
         bootstrap: async () => {
           if (!session.signedIn) return
