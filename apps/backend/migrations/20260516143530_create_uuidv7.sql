@@ -1,4 +1,5 @@
 -- +goose Up
+-- +goose StatementBegin
 CREATE OR REPLACE FUNCTION uuidv7() RETURNS UUID AS $$
 DECLARE
   v_unix_ms BIGINT;
@@ -24,6 +25,7 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql;
+-- +goose StatementEnd
 
 -- +goose Down
 DROP FUNCTION IF EXISTS uuidv7();

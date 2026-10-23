@@ -1,3 +1,20 @@
+# Meetspace local stack: docker compose up --build
+# Then seed demo data: docker compose run --rm backend ./seed
+name: meetspace
+
+x-backend-env: &backend-env
+  APP_ENV: dev
+  APP_JWT_SECRET: ${APP_JWT_SECRET:-dev-only-change-me}
+  APP_POSTGRES_HOST: postgres
+  APP_REDIS_HOST: redis
+  APP_LIVEKIT_URL: ws://localhost:7880
+  APP_LIVEKIT_API_URL: http://livekit:7880
+  APP_LIVEKIT_API_KEY: devkey
+  APP_LIVEKIT_API_SECRET: meetspace-dev-livekit-secret-0123456789
+  APP_AI_GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  APP_MEDIA_DIR: /data/media
+  APP_WEB_URL: http://localhost:3000
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -5,6 +22,8 @@ services:
       POSTGRES_USER: meetspace
       POSTGRES_PASSWORD: meetspace
       POSTGRES_DB: meetspace
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -13,13 +32,36 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  livekit:
+    image: livekit/livekit-server:v1.9.4
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./deploy/livekit.yaml:/etc/livekit.yaml:ro
+    # Webhooks go to http://backend:8080. That resolves to the host, which works
+    # whether the API runs in compose (published port) or with `go run` locally.
+    extra_hosts:
+      - "backend:host-gateway"
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+
   migrator:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile.migrator
     command: ["up"]
-    env_file:
-      - ./apps/backend/.env.docker
+    environment: *backend-env
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,41 +69,40 @@ services:
   backend:
     build:
       context: ./apps/backend
-      dockerfile: Dockerfile
+    command: ["./server"]
     ports:
       - "8080:8080"
-    env_file:
-      - ./apps/backend/.env.docker
+    environment: *backend-env
+    volumes:
+      - media_data:/data/media
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
     restart: on-failure
 
+  worker:
+    build:
+      context: ./apps/backend
+    command: ["./worker"]
+    environment: *backend-env
+    depends_on:
+      backend:
+        condition: service_started
+    restart: on-failure
+
   web:
     build:
       context: ./apps/web
-      dockerfile: Dockerfile
-      target: runner
     ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-      - HOSTNAME=0.0.0.0
-    restart: always
-
-  admin:
-    build:
-      context: ./apps/admin
-      dockerfile: Dockerfile
-      target: runner
-    ports:
-      - "3001:3000"
-    environment:
-      - PORT=3000
-      - HOSTNAME=0.0.0.0
+      - "3000:80"
+    depends_on:
+      - backend
     restart: always
 
 volumes:
   postgres_data:
+  media_data:

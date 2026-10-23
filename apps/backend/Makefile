@@ -1,4 +1,4 @@
-.PHONY: build run migrate test lint
+.PHONY: build run worker migrate seed test lint
 
 build:
 	go build ./...
@@ -6,8 +6,14 @@ build:
 run:
 	go run ./cmd/server
 
+worker:
+	go run ./cmd/worker
+
 migrate:
-	go run ./cmd/migrator
+	go run ./cmd/migrator up
+
+seed:
+	go run ./cmd/seed
 
 test:
 	go test ./...

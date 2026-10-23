@@ -72,3 +72,12 @@ func (j *JWT) GetClaims(token *jwt.Token) (map[string]interface{}, error) {
 	}
 	return claims, nil
 }
+
+// Claims validates tokenString and returns its claims in one call.
+func (j *JWT) Claims(tokenString string) (map[string]interface{}, error) {
+	tok, err := j.ValidateToken(tokenString)
+	if err != nil {
+		return nil, err
+	}
+	return j.GetClaims(tok)
+}
