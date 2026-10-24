@@ -365,8 +365,9 @@ func deref[T any](v *T) T {
 	return *v
 }
 
-func (s *Service) DeleteTask(ctx context.Context, ws, id string) error {
-	ids, err := s.repo.DeleteTask(ctx, ws, id)
+// DeleteTask moves a task (and its subtasks) to the trash.
+func (s *Service) DeleteTask(ctx context.Context, ws, actorID, id string) error {
+	ids, err := s.repo.DeleteTask(ctx, ws, id, actorID)
 	if err != nil {
 		return err
 	}
@@ -381,6 +382,30 @@ func (s *Service) DeleteTask(ctx context.Context, ws, id string) error {
 		s.emit(ctx, ws, "tasks", "upsert", &changed[i])
 	}
 	return nil
+}
+
+// ListTrash returns the tasks waiting in the trash.
+func (s *Service) ListTrash(ctx context.Context, ws string) ([]domain.TrashedTask, error) {
+	return s.repo.ListTrash(ctx, ws)
+}
+
+// RestoreTask brings a trashed task back with the subtasks deleted alongside it.
+func (s *Service) RestoreTask(ctx context.Context, ws, actorID, id string) ([]domain.Task, error) {
+	tasks, err := s.repo.RestoreTask(ctx, ws, id)
+	if err != nil {
+		return nil, err
+	}
+	for i := range tasks {
+		s.emit(ctx, ws, "tasks", "upsert", &tasks[i])
+	}
+	s.logActivity(ctx, ws, id, actorID, "restored this task from the trash")
+	return tasks, nil
+}
+
+// PurgeTask deletes a trashed task for good.
+func (s *Service) PurgeTask(ctx context.Context, ws, id string) error {
+	_, err := s.repo.PurgeTask(ctx, ws, id)
+	return err
 }
 
 func (s *Service) DuplicateTask(ctx context.Context, ws, actorID, id, newID string) (*domain.Task, error) {
@@ -468,9 +493,9 @@ func (s *Service) BulkUpdate(ctx context.Context, ws, actorID string, ids []stri
 	return out, nil
 }
 
-func (s *Service) BulkDelete(ctx context.Context, ws string, ids []string) error {
+func (s *Service) BulkDelete(ctx context.Context, ws, actorID string, ids []string) error {
 	for _, id := range ids {
-		if err := s.DeleteTask(ctx, ws, id); err != nil && !apperror.IsKind(err, apperror.KindNotFound) {
+		if err := s.DeleteTask(ctx, ws, actorID, id); err != nil && !apperror.IsKind(err, apperror.KindNotFound) {
 			return err
 		}
 	}

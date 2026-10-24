@@ -15,6 +15,8 @@ type AgentInput struct {
 	Description  string `json:"description"`
 	Instructions string `json:"instructions"`
 	Icon         string `json:"icon"`
+	Kind         string `json:"kind"`    // "agent" (default) or "skill"; fixed once created
+	Enabled      *bool  `json:"enabled"` // skills can be switched off without deleting them
 }
 
 func (in *AgentInput) clean() error {
@@ -24,6 +26,9 @@ func (in *AgentInput) clean() error {
 	}
 	if in.Icon == "" || utf8.RuneCountInString(in.Icon) > 4 {
 		in.Icon = "✨"
+	}
+	if in.Kind != domain.KindSkill {
+		in.Kind = domain.KindAgent
 	}
 	return nil
 }
@@ -36,7 +41,7 @@ func (s *Service) CreateAgent(ctx context.Context, ws, userID string, in AgentIn
 	if err := in.clean(); err != nil {
 		return nil, err
 	}
-	a := &domain.Agent{ID: in.ID, WorkspaceID: ws, Name: in.Name, Description: in.Description, Instructions: in.Instructions, Icon: in.Icon, CreatedBy: &userID}
+	a := &domain.Agent{ID: in.ID, WorkspaceID: ws, Name: in.Name, Description: in.Description, Instructions: in.Instructions, Icon: in.Icon, Kind: in.Kind, Enabled: in.Enabled == nil || *in.Enabled, CreatedBy: &userID}
 	if err := s.agents.Create(ctx, a); err != nil {
 		return nil, err
 	}
@@ -52,6 +57,9 @@ func (s *Service) UpdateAgent(ctx context.Context, ws, id string, in AgentInput)
 		return nil, err
 	}
 	a.Name, a.Description, a.Instructions, a.Icon = in.Name, in.Description, in.Instructions, in.Icon
+	if in.Enabled != nil {
+		a.Enabled = *in.Enabled
+	}
 	if err := s.agents.Update(ctx, a); err != nil {
 		return nil, err
 	}
@@ -73,6 +81,13 @@ func (s *Service) withAgent(ctx context.Context, req *RunRequest) error {
 	a, err := s.agents.Get(ctx, req.WorkspaceID, req.AgentID)
 	if err != nil {
 		return err
+	}
+	if a.Kind == domain.KindSkill {
+		if !a.Enabled {
+			return domain.ErrSkillDisabled
+		}
+		req.Context = "Apply the workspace skill “" + a.Name + "” to the user's request. Do the work the way the skill describes, using the workspace tools when they help:\n" + a.Instructions + "\n\n" + req.Context
+		return nil
 	}
 	req.Context = "You are acting as the workspace agent “" + a.Name + "”. Follow these standing instructions from the team:\n" + a.Instructions + "\n\n" + req.Context
 	return nil

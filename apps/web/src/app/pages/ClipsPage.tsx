@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryState } from '../../lib/useQueryState'
 import { format, parseISO } from 'date-fns'
-import { Camera, CheckSquare, Circle, Download, Film, Hash, Mic, Monitor, Search, Share2, Trash2, Video, X } from 'lucide-react'
+import { Camera, CheckSquare, Circle, Download, Film, Hash, LayoutGrid, List as ListIcon, Mic, Monitor, Search, Share2, Trash2, Video, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { Clip, ClipKind } from '../../store/types'
 import { Avatar, MenuItem, Modal, Popover, usePopover } from '../components/ui'
@@ -16,13 +16,42 @@ function size(bytes: number) {
   return bytes > 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`
 }
 
+type ClipSort = 'newest' | 'oldest' | 'longest' | 'name'
+const SORTS: Record<ClipSort, (a: Clip, b: Clip) => number> = {
+  newest: (a, b) => b.createdAt.localeCompare(a.createdAt),
+  oldest: (a, b) => a.createdAt.localeCompare(b.createdAt),
+  longest: (a, b) => b.durationSec - a.durationSec,
+  name: (a, b) => a.title.localeCompare(b.title),
+}
+/** "video" covers every recording with a picture; the rest match a single kind. */
+const inKind = (c: Clip, k: string) => k === 'all' || c.kind === k || (k === 'video' && ['screen', 'camera', 'screen+camera'].includes(c.kind))
+
 export default function ClipsPage() {
   const clips = useStore((s) => s.clips)
+  const me = useStore((s) => s.currentUserId)
   const openRecorder = useRecorder((s) => s.open)
   const [q, setQ] = useState('')
-  const [kind, setKind] = useQueryState<'all' | ClipKind>('kind', 'all')
+  const [kind, setKind] = useQueryState<'all' | 'video' | ClipKind>('kind', 'all')
+  const [owner, setOwner] = useQueryState<'all' | 'mine' | 'others'>('owner', 'all')
+  const [sort, setSort] = useQueryState<ClipSort>('sort', 'newest')
+  const [layout, setLayout] = useState<'grid' | 'list'>(() => {
+    try {
+      return localStorage.getItem('ms.clips.layout') === 'list' ? 'list' : 'grid'
+    } catch {
+      return 'grid'
+    }
+  })
+  const pickLayout = (l: 'grid' | 'list') => {
+    setLayout(l)
+    try {
+      localStorage.setItem('ms.clips.layout', l)
+    } catch {
+      /* storage blocked */
+    }
+  }
   const [active, setActive] = useState<Clip | null>(null)
-  const shown = clips.filter((c) => (kind === 'all' || c.kind === kind) && c.title.toLowerCase().includes(q.toLowerCase()))
+  const owned = clips.filter((c) => (owner === 'mine' ? c.createdBy === me : owner === 'others' ? c.createdBy !== me : true))
+  const shown = owned.filter((c) => inKind(c, kind) && c.title.toLowerCase().includes(q.toLowerCase())).sort(SORTS[sort])
 
   return (
     <div className="h-full overflow-y-auto scroll-thin">
@@ -38,12 +67,33 @@ export default function ClipsPage() {
             <Circle size={12} fill="currentColor" /> Record
           </button>
         </div>
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {(['all', 'screen+camera', 'screen', 'camera', 'audio', 'call'] as const).map((k) => (
-            <button key={k} onClick={() => setKind(k)} className={cn('rounded-full border px-3 py-1 text-xs font-medium capitalize', kind === k ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100' : 'border-app text-muted')}>
-              {k === 'all' ? 'All' : k === 'call' ? 'Call recordings' : k === 'audio' ? 'Voice' : k.replace('+', ' + ')}
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          {(['all', 'video', 'audio', 'call', 'screen+camera', 'screen', 'camera'] as const).map((k) => (
+            <button key={k} onClick={() => setKind(k)} className={cn('rounded-full border px-3 py-1 text-xs font-medium', kind === k ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100' : 'border-app text-muted')}>
+              {({ all: 'All', video: 'Video clips', audio: 'Voice clips', call: 'Call recordings', 'screen+camera': 'Screen + camera', screen: 'Screen', camera: 'Camera' } as const)[k]}
+              <span className="ml-1 opacity-60">{owned.filter((c) => inKind(c, k)).length}</span>
             </button>
           ))}
+          <div className="ml-auto flex items-center gap-1.5">
+            <select value={owner} onChange={(e) => setOwner(e.target.value as typeof owner)} className="border-app surface h-7 rounded-md border px-1.5 text-xs" aria-label="Created by">
+              <option value="all">Anyone</option>
+              <option value="mine">Created by me</option>
+              <option value="others">Shared with me</option>
+            </select>
+            <select value={sort} onChange={(e) => setSort(e.target.value as ClipSort)} className="border-app surface h-7 rounded-md border px-1.5 text-xs" aria-label="Sort">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="longest">Longest</option>
+              <option value="name">Name</option>
+            </select>
+            <div className="border-app flex rounded-md border">
+              {(['grid', 'list'] as const).map((l) => (
+                <button key={l} onClick={() => pickLayout(l)} className={cn('p-1', layout === l ? 'text-brand-600 bg-brand-50 dark:bg-brand-600/20' : 'text-muted')} aria-label={`${l} layout`} aria-pressed={layout === l}>
+                  {l === 'grid' ? <LayoutGrid size={14} /> : <ListIcon size={14} />}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {shown.length === 0 ? (
@@ -56,6 +106,35 @@ export default function ClipsPage() {
                 <Circle size={12} fill="currentColor" /> Record your first clip
               </button>
             )}
+          </div>
+        ) : layout === 'list' ? (
+          <div className="border-app overflow-hidden rounded-xl border">
+            {shown.map((c) => {
+              const Icon = KIND_ICON[c.kind]
+              return (
+                <button key={c.id} onClick={() => setActive(c)} className="border-app hover-surface flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0">
+                  <span className="relative h-10 w-16 shrink-0 overflow-hidden rounded bg-stone-900">
+                    {c.thumb ? <img src={c.thumb} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-white/40"><Icon size={16} /></span>}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{c.title}</span>
+                    <span className="text-faint flex items-center gap-1.5 text-xs">
+                      <Icon size={11} /> {c.kind === 'call' ? 'Call recording' : c.kind === 'audio' ? 'Voice' : c.kind.replace('+', ' + ')}
+                      {c.taskId && (
+                        <>
+                          {' '}
+                          · <CheckSquare size={11} className="text-brand-600" /> on a task
+                        </>
+                      )}
+                    </span>
+                  </span>
+                  <Avatar userId={c.createdBy} size={20} />
+                  <span className="text-muted w-28 shrink-0 text-xs">{format(parseISO(c.createdAt), 'MMM d, h:mm a')}</span>
+                  <span className="text-muted w-14 shrink-0 text-right font-mono text-xs">{formatDuration(c.durationSec)}</span>
+                  <span className="text-faint hidden w-16 shrink-0 text-right text-xs sm:block">{size(c.size)}</span>
+                </button>
+              )
+            })}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

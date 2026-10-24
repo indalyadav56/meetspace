@@ -33,9 +33,10 @@ export function Logo({ size = 28, withText = true, className }: { size?: number;
 export function Avatar({ userId, size = 24, ring = false }: { userId: ID; size?: number; ring?: boolean }) {
   const user = useStore((s) => s.users.find((u) => u.id === userId))
   if (!user) return null
+  const st = user.status && (!user.status.until || user.status.until > new Date().toISOString()) ? user.status : undefined
   return (
     <span
-      title={user.name}
+      title={st ? `${user.name} · ${`${st.emoji} ${st.text}`.trim()}` : user.name}
       className={cn('inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white', ring && 'ring-2 ring-[var(--bg)]')}
       style={{ width: size, height: size, background: user.color, fontSize: size * 0.4 }}
     >

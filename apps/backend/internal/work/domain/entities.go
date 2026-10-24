@@ -30,6 +30,15 @@ type Status struct {
 
 func (s Status) Finished() bool { return s.Type == StatusDone || s.Type == StatusClosed }
 
+// Details describe a Space or List: what it is for, who owns it, how urgent it is and when it runs.
+type Details struct {
+	Description string  `json:"description"`
+	OwnerID     *string `json:"ownerId"`
+	Priority    *string `json:"priority"`
+	StartDate   *string `json:"startDate"`
+	DueDate     *string `json:"dueDate"`
+}
+
 type Project struct {
 	ID          string    `json:"id"`
 	WorkspaceID string    `json:"-"`
@@ -37,6 +46,7 @@ type Project struct {
 	Color       string    `json:"color"`
 	Statuses    []Status  `json:"statuses"`
 	CreatedAt   time.Time `json:"createdAt"`
+	Details
 }
 
 func (p Project) Status(id string) (Status, bool) {
@@ -81,6 +91,7 @@ type List struct {
 	ProjectID   string  `json:"projectId"`
 	FolderID    *string `json:"folderId"`
 	Name        string  `json:"name"`
+	Details
 }
 
 type ChecklistItem struct {
@@ -263,3 +274,14 @@ var (
 	ErrDependencyCycle    = apperror.Conflict("dependency_cycle", "these tasks already depend on each other")
 	ErrFormClosed         = apperror.Conflict("form_closed", "this form isn't accepting responses")
 )
+
+// TrashedTask is a deleted task waiting in the trash.
+type TrashedTask struct {
+	ID        string    `json:"id"`
+	Key       int64     `json:"key"`
+	Title     string    `json:"title"`
+	ListID    string    `json:"listId"`
+	DeletedAt time.Time `json:"deletedAt"`
+	DeletedBy string    `json:"deletedBy"`
+	Subtasks  int       `json:"subtasks"`
+}

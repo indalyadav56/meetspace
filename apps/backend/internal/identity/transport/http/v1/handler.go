@@ -8,6 +8,7 @@ import (
 
 	"github.com/indalyadav56/meetspace/backend/internal/identity/application"
 	"github.com/indalyadav56/meetspace/backend/pkg/authctx"
+	"github.com/indalyadav56/meetspace/backend/pkg/optional"
 	"github.com/indalyadav56/meetspace/backend/pkg/response"
 )
 
@@ -50,8 +51,9 @@ type changeReq struct {
 }
 
 type updateMeReq struct {
-	FullName *string `json:"name"`
-	Color    *string `json:"color"`
+	FullName *string                             `json:"name"`
+	Color    *string                             `json:"color"`
+	Status   optional.Field[application.Status] `json:"status"`
 }
 
 type authResp struct {
@@ -186,6 +188,9 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		return
 	}
 	p, err := h.users.UpdateMe(c.Request.Context(), authctx.UserID(c), req.FullName, req.Color)
+	if err == nil && req.Status.Set {
+		p, err = h.users.SetStatus(c.Request.Context(), authctx.UserID(c), req.Status.Value)
+	}
 	if err != nil {
 		response.FromError(c, err)
 		return

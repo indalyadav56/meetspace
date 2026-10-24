@@ -85,8 +85,9 @@ func (s *Service) UpdateDoc(ctx context.Context, ws, id string, p DocPatch) (*do
 	return d, nil
 }
 
-func (s *Service) DeleteDoc(ctx context.Context, ws, id string) error {
-	if err := s.repo.DeleteDoc(ctx, ws, id); err != nil {
+// DeleteDoc moves a doc to the trash.
+func (s *Service) DeleteDoc(ctx context.Context, ws, actorID, id string) error {
+	if err := s.repo.DeleteDoc(ctx, ws, id, actorID); err != nil {
 		return err
 	}
 	s.pub.Publish(ctx, ws, "docs", "delete", map[string]string{"id": id}, nil)
@@ -139,12 +140,55 @@ func (s *Service) UpdateWhiteboard(ctx context.Context, ws, id string, p Whitebo
 	return w, nil
 }
 
-func (s *Service) DeleteWhiteboard(ctx context.Context, ws, id string) error {
-	if err := s.repo.DeleteWhiteboard(ctx, ws, id); err != nil {
+// DeleteWhiteboard moves a whiteboard to the trash.
+func (s *Service) DeleteWhiteboard(ctx context.Context, ws, actorID, id string) error {
+	if err := s.repo.DeleteWhiteboard(ctx, ws, id, actorID); err != nil {
 		return err
 	}
 	s.pub.Publish(ctx, ws, "whiteboards", "delete", map[string]string{"id": id}, nil)
 	return nil
+}
+
+func (s *Service) ListTrash(ctx context.Context, ws string) ([]domain.TrashedItem, error) {
+	return s.repo.ListTrash(ctx, ws)
+}
+
+func validKind(kind string) error {
+	if kind != domain.TrashDoc && kind != domain.TrashWhiteboard {
+		return apperror.Invalid("invalid_kind", "kind must be doc or whiteboard")
+	}
+	return nil
+}
+
+// Restore brings a trashed doc or whiteboard back and tells every client.
+func (s *Service) Restore(ctx context.Context, ws, kind, id string) error {
+	if err := validKind(kind); err != nil {
+		return err
+	}
+	if err := s.repo.Restore(ctx, ws, kind, id); err != nil {
+		return err
+	}
+	if kind == domain.TrashWhiteboard {
+		w, err := s.repo.GetWhiteboard(ctx, ws, id)
+		if err != nil {
+			return err
+		}
+		s.pub.Publish(ctx, ws, "whiteboards", "upsert", w, nil)
+		return nil
+	}
+	d, err := s.repo.GetDoc(ctx, ws, id)
+	if err != nil {
+		return err
+	}
+	s.pub.Publish(ctx, ws, "docs", "upsert", d, nil)
+	return nil
+}
+
+func (s *Service) Purge(ctx context.Context, ws, kind, id string) error {
+	if err := validKind(kind); err != nil {
+		return err
+	}
+	return s.repo.Purge(ctx, ws, kind, id)
 }
 
 func (s *Service) Snapshot(ctx context.Context, ws, _ string) (map[string]any, error) {
@@ -162,5 +206,71 @@ func (s *Service) Snapshot(ctx context.Context, ws, _ string) (map[string]any, e
 	if wbs == nil {
 		wbs = []domain.Whiteboard{}
 	}
-	return map[string]any{"docs": docs, "whiteboards": wbs}, nil
+	dash, err := s.repo.ListDashboards(ctx, ws)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"docs": docs, "whiteboards": wbs, "dashboards": dash}, nil
+}
+
+// DashboardCards are the report cards a dashboard can show.
+var DashboardCards = map[string]bool{
+	"stats": true, "status": true, "workload": true, "trend": true, "priority": true,
+	"overdue": true, "dueSoon": true, "recentlyDone": true, "byList": true, "byTag": true,
+}
+
+type DashboardInput struct {
+	ID        string   `json:"id"`
+	ProjectID *string  `json:"projectId"`
+	Title     *string  `json:"title"`
+	Cards     []string `json:"cards"`
+}
+
+// SaveDashboard creates a dashboard or changes its title, scope or cards.
+func (s *Service) SaveDashboard(ctx context.Context, ws, actorID, id string, in DashboardInput, create bool) (*domain.Dashboard, error) {
+	d := &domain.Dashboard{ID: id, WorkspaceID: ws, CreatedBy: actorID, Title: "Untitled dashboard", Cards: []string{"stats", "status", "workload", "trend"}}
+	if !create {
+		cur, err := s.repo.GetDashboard(ctx, ws, id)
+		if err != nil {
+			return nil, err
+		}
+		d = cur
+	}
+	if in.Title != nil {
+		t := strings.TrimSpace(*in.Title)
+		if t == "" || len(t) > 200 {
+			return nil, apperror.Invalid("invalid_title", "dashboard title must be 1-200 characters")
+		}
+		d.Title = t
+	}
+	if create || in.ProjectID != nil {
+		d.ProjectID = in.ProjectID
+		if d.ProjectID != nil && *d.ProjectID == "" {
+			d.ProjectID = nil
+		}
+	}
+	if in.Cards != nil {
+		cards := []string{}
+		seen := map[string]bool{}
+		for _, c := range in.Cards {
+			if DashboardCards[c] && !seen[c] {
+				seen[c] = true
+				cards = append(cards, c)
+			}
+		}
+		d.Cards = cards
+	}
+	if err := s.repo.SaveDashboard(ctx, d); err != nil {
+		return nil, err
+	}
+	s.pub.Publish(ctx, ws, "dashboards", "upsert", d, nil)
+	return d, nil
+}
+
+func (s *Service) DeleteDashboard(ctx context.Context, ws, id string) error {
+	if err := s.repo.DeleteDashboard(ctx, ws, id); err != nil {
+		return err
+	}
+	s.pub.Publish(ctx, ws, "dashboards", "delete", map[string]string{"id": id}, nil)
+	return nil
 }

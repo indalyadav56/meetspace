@@ -3,11 +3,13 @@ package application
 import (
 	"context"
 	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/indalyadav56/meetspace/backend/internal/work/domain"
 	"github.com/indalyadav56/meetspace/backend/pkg/apperror"
+	"github.com/indalyadav56/meetspace/backend/pkg/optional"
 )
 
 var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -46,6 +48,51 @@ type ProjectPatch struct {
 	Name     *string
 	Color    *string
 	Statuses *[]domain.Status
+	Details  DetailsPatch
+}
+
+// DetailsPatch changes Space/List details; each field may be absent, set, or cleared with null.
+type DetailsPatch struct {
+	Description *string
+	OwnerID     optional.Field[string]
+	Priority    optional.Field[string]
+	StartDate   optional.Field[string]
+	DueDate     optional.Field[string]
+}
+
+func (p DetailsPatch) apply(d *domain.Details) error {
+	if p.Description != nil {
+		desc := strings.TrimSpace(*p.Description)
+		if len(desc) > 5000 {
+			return apperror.Invalid("invalid_description", "description must be under 5000 characters")
+		}
+		d.Description = desc
+	}
+	if p.OwnerID.Set {
+		d.OwnerID = p.OwnerID.Value
+	}
+	if p.Priority.Set {
+		if p.Priority.Value != nil && !validPriorities[*p.Priority.Value] {
+			return apperror.Invalid("invalid_priority", "priority must be urgent, high, normal or low")
+		}
+		d.Priority = p.Priority.Value
+	}
+	for _, f := range []struct {
+		in  optional.Field[string]
+		out **string
+	}{{p.StartDate, &d.StartDate}, {p.DueDate, &d.DueDate}} {
+		if !f.in.Set {
+			continue
+		}
+		if err := validDate(f.in.Value); err != nil {
+			return err
+		}
+		*f.out = f.in.Value
+	}
+	if d.StartDate != nil && d.DueDate != nil && *d.StartDate > *d.DueDate {
+		return apperror.Invalid("invalid_dates", "start date must be on or before the due date")
+	}
+	return nil
 }
 
 func validateStatuses(sts []domain.Status) error {
@@ -93,6 +140,9 @@ func (s *Service) UpdateProject(ctx context.Context, ws, id string, p ProjectPat
 			return nil, err
 		}
 		proj.Statuses = *p.Statuses
+	}
+	if err := p.Details.apply(&proj.Details); err != nil {
+		return nil, err
 	}
 	if err := s.repo.UpdateProject(ctx, proj); err != nil {
 		return nil, err
@@ -175,12 +225,18 @@ func (s *Service) CreateList(ctx context.Context, ws, id, projectID string, fold
 	return l, nil
 }
 
-func (s *Service) RenameList(ctx context.Context, ws, id, name string) (*domain.List, error) {
+// UpdateList renames a List and/or changes its details.
+func (s *Service) UpdateList(ctx context.Context, ws, id string, name *string, details DetailsPatch) (*domain.List, error) {
 	l, err := s.repo.GetList(ctx, ws, id)
 	if err != nil {
 		return nil, err
 	}
-	if l.Name, err = cleanName(name, 120, "invalid_name"); err != nil {
+	if name != nil {
+		if l.Name, err = cleanName(*name, 120, "invalid_name"); err != nil {
+			return nil, err
+		}
+	}
+	if err := details.apply(&l.Details); err != nil {
 		return nil, err
 	}
 	if err := s.repo.UpdateList(ctx, l); err != nil {

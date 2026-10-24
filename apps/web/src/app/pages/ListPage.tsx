@@ -3,6 +3,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { Star } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import ViewHost from '../views/ViewHost'
+import DetailsBar from '../components/DetailsBar'
 import { InlineEdit } from '../components/ui'
 import { cn } from '../../lib/utils'
 import { ChevronRight } from 'lucide-react'
@@ -51,6 +52,7 @@ export default function ListPage() {
           <Star size={15} className={cn(fav ? 'fill-amber-400 text-amber-400' : 'text-faint')} />
         </button>
       </div>
+      <DetailsBar value={list} onChange={(p) => s.updateList(listId, p)} what="List" className="-mt-1 px-4 pb-1" />
       <div className="min-h-0 flex-1">
         <ViewHost viewKey={listId} sourceTasks={tasks} statuses={space.statuses} defaultListId={listId} fieldListId={listId} />
       </div>

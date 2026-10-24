@@ -27,6 +27,8 @@ import AIPage from './app/pages/ai/AIPage'
 import PlannerPage from './app/pages/planner/PlannerPage'
 import AppsPage from './app/pages/apps/AppsPage'
 import TeamsPage from './app/pages/teams/TeamsPage'
+import AssignedComments from './app/pages/AssignedComments'
+import MeetingsPage from './app/pages/MeetingsPage'
 import PublicForm from './marketing/PublicForm'
 import { Logo } from './app/components/ui'
 
@@ -113,6 +115,7 @@ export default function App() {
         <Route path="docs" element={<DocsPage />} />
         <Route path="docs/:docId" element={<DocsPage />} />
         <Route path="dashboards" element={<Dashboards />} />
+        <Route path="dashboards/:dashboardId" element={<Dashboards />} />
         <Route path="everything" element={<Everything />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="chat/calls" element={<ChatCalls />} />
@@ -131,6 +134,8 @@ export default function App() {
         <Route path="planner" element={<PlannerPage />} />
         <Route path="apps" element={<AppsPage />} />
         <Route path="teams" element={<TeamsPage />} />
+        <Route path="comments" element={<AssignedComments />} />
+        <Route path="meetings" element={<MeetingsPage />} />
         <Route path="forms/:formId" element={<FormsPage />} />
         <Route path="space/:spaceId" element={<SpacePage />} />
         <Route path="list/:listId" element={<ListPage />} />

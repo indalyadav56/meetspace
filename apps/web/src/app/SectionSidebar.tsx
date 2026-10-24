@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
+  AlarmClock,
   AtSign,
   Bell,
   BellOff,
@@ -14,14 +15,20 @@ import {
   LayoutDashboard,
   Layers,
   List as ListIcon,
+  MessageSquareDot,
   Mic,
   Monitor,
   PenTool,
   Plus,
   Settings,
+  Share2,
   Star,
+  Archive,
+  CheckCircle2,
+  Tag as TagIcon,
   Target,
   Timer,
+  Trash2,
   Users,
   Video,
   Workflow,
@@ -34,6 +41,7 @@ import { AISidebar } from './pages/ai/AISidebar'
 import { PlannerSidebar } from './pages/planner/PlannerSidebar'
 import { AppsSidebar } from './pages/apps/AppsSidebar'
 import { TeamsSidebar } from './pages/teams/TeamsSidebar'
+import { isSnoozed, useSnoozed } from './inbox/snooze'
 import { cn } from '../lib/utils'
 
 /*
@@ -172,6 +180,7 @@ function HomeSidebar() {
   const me = s.currentUserId
   const unread = s.notifications.filter((n) => !n.read && !n.cleared).length
   const mine = s.tasks.filter((t) => me && t.assignees.includes(me) && !t.parentId).length
+  const assignedComments = s.comments.filter((c) => c.assignee === me && !c.resolved).length
   const { favorites, recents } = useFavoritesAndRecents()
   return (
     <SidebarShell title="Home">
@@ -179,6 +188,8 @@ function HomeSidebar() {
         <Row to="/app/home" icon={LayoutDashboard} label="Overview" />
         <Row to="/app/inbox" icon={InboxIcon} label="Inbox" count={unread} />
         <Row to="/app/planner" icon={CalendarDays} label="Planner" />
+        <Row to="/app/comments" icon={MessageSquareDot} label="Assigned comments" count={assignedComments} keys={['tab']} prefix />
+        <Row to="/app/meetings" icon={Video} label="Meetings" />
         <Row to="/app/everything?mine=1" icon={CheckSquare} label="My tasks" count={mine} keys={['mine']} />
         <Row to="/app/timesheets" icon={Timer} label="My timesheet" />
       </Group>
@@ -200,13 +211,16 @@ function HomeSidebar() {
 
 function InboxSidebar() {
   const n = useStore((s) => s.notifications)
-  const important = n.filter((x) => !x.cleared && x.important && !x.read).length
-  const other = n.filter((x) => !x.cleared && !x.important && !x.read).length
+  const { until } = useSnoozed()
+  const important = n.filter((x) => !x.cleared && x.important && !x.read && !isSnoozed(until, x.id)).length
+  const other = n.filter((x) => !x.cleared && !x.important && !x.read && !isSnoozed(until, x.id)).length
+  const later = n.filter((x) => !x.cleared && isSnoozed(until, x.id)).length
   return (
     <SidebarShell title="Inbox">
       <Group>
-        <Row to="/app/inbox" icon={Bell} label="Important" count={important} keys={['tab']} />
+        <Row to="/app/inbox" icon={Bell} label="Primary" count={important} keys={['tab']} />
         <Row to="/app/inbox?tab=other" icon={AtSign} label="Other" count={other} keys={['tab']} />
+        <Row to="/app/inbox?tab=later" icon={AlarmClock} label="Later" count={later} keys={['tab']} />
         <Row to="/app/inbox?tab=cleared" icon={BellOff} label="Cleared" keys={['tab']} />
       </Group>
       <Group label="Related">
@@ -225,7 +239,10 @@ function DocsSidebar() {
   return (
     <SidebarShell title="Docs" action={<AddButton label="New doc" onClick={() => nav(`/app/docs/${s.addDoc(null)}`)} />}>
       <Group>
-        <Row to="/app/docs" icon={FileText} label="All docs" count={s.docs.length} />
+        <Row to="/app/docs" icon={FileText} label="All docs" count={s.docs.length} keys={['in']} />
+        <Row to="/app/docs?in=mine" icon={Users} label="My docs" count={s.docs.filter((d) => d.createdBy === s.currentUserId).length} keys={['in']} />
+        <Row to="/app/docs?in=meetings" icon={Video} label="Meeting notes" keys={['in']} />
+        <Row to="/app/docs?in=favorites" icon={Star} label="Favorites" count={favs.length} keys={['in']} />
       </Group>
       {favs.length > 0 && (
         <Group label="Favorites">
@@ -270,6 +287,24 @@ function BoardsSidebar() {
   )
 }
 
+function DashboardsSidebar() {
+  const s = useStore()
+  const nav = useNavigate()
+  const mine = s.dashboards.filter((d) => d.createdBy === s.currentUserId)
+  const favs = s.dashboards.filter((d) => s.favorites.includes(d.id))
+  const dash = (d: { id: string; title: string }) => <Row key={d.id} to={`/app/dashboards/${d.id}`} icon={LayoutDashboard} label={d.title} />
+  return (
+    <SidebarShell title="Dashboards" action={<AddButton label="New dashboard" onClick={() => nav(`/app/dashboards/${s.addDashboard()}`)} />}>
+      <Group>
+        <Row to="/app/dashboards" icon={LayoutDashboard} label="All dashboards" count={s.dashboards.length} keys={['in']} />
+        <Row to="/app/dashboards?in=mine" icon={Users} label="My dashboards" count={mine.length} keys={['in']} />
+        <Row to="/app/dashboards?in=favorites" icon={Star} label="Favorites" count={favs.length} keys={['in']} />
+      </Group>
+      {s.dashboards.length > 0 && <Group label="Dashboards">{s.dashboards.map(dash)}</Group>}
+    </SidebarShell>
+  )
+}
+
 function FormsSidebar() {
   const s = useStore()
   const nav = useNavigate()
@@ -277,7 +312,10 @@ function FormsSidebar() {
   return (
     <SidebarShell title="Forms" action={list && <AddButton label="New form" onClick={() => nav(`/app/forms/${s.addForm(list.id)}`)} />}>
       <Group>
-        <Row to="/app/forms" icon={FileText} label="All forms" count={s.forms.length} />
+        <Row to="/app/forms" icon={FileText} label="All forms" count={s.forms.length} keys={['in']} />
+        <Row to="/app/forms?in=active" icon={CheckCircle2} label="Active" count={s.forms.filter((f) => f.active).length} keys={['in']} />
+        <Row to="/app/forms?in=closed" icon={Archive} label="Closed" count={s.forms.filter((f) => !f.active).length} keys={['in']} />
+        <Row to="/app/forms?in=favorites" icon={Star} label="Favorites" count={s.forms.filter((f) => s.favorites.includes(f.id)).length} keys={['in']} />
       </Group>
       {s.forms.length > 0 && (
         <Group label="Forms">
@@ -292,16 +330,19 @@ function FormsSidebar() {
 
 function ClipsSidebar() {
   const clips = useStore((s) => s.clips)
+  const me = useStore((s) => s.currentUserId)
   const n = (k?: string) => (k ? clips.filter((c) => c.kind === k).length : clips.length)
   return (
     <SidebarShell title="Clips">
       <Group>
-        <Row to="/app/clips" icon={Film} label="All clips" count={n()} keys={['kind']} />
-        <Row to="/app/clips?kind=screen" icon={Monitor} label="Screen" count={n('screen')} keys={['kind']} />
-        <Row to="/app/clips?kind=camera" icon={Video} label="Camera" count={n('camera')} keys={['kind']} />
-        <Row to="/app/clips?kind=screen%2Bcamera" icon={Users} label="Screen + camera" count={n('screen+camera')} keys={['kind']} />
-        <Row to="/app/clips?kind=audio" icon={Mic} label="Voice" count={n('audio')} keys={['kind']} />
-        <Row to="/app/clips?kind=call" icon={Video} label="Call recordings" count={n('call')} keys={['kind']} />
+        <Row to="/app/clips" icon={Film} label="All clips" count={n()} keys={['kind', 'owner']} />
+        <Row to="/app/clips?kind=video" icon={Monitor} label="Video clips" count={n('screen') + n('camera') + n('screen+camera')} keys={['kind', 'owner']} />
+        <Row to="/app/clips?kind=audio" icon={Mic} label="Voice clips" count={n('audio')} keys={['kind', 'owner']} />
+        <Row to="/app/clips?kind=call" icon={Video} label="Call recordings" count={n('call')} keys={['kind', 'owner']} />
+      </Group>
+      <Group label="People">
+        <Row to="/app/clips?owner=mine" icon={Users} label="Created by me" count={clips.filter((c) => c.createdBy === me).length} keys={['kind', 'owner']} />
+        <Row to="/app/clips?owner=others" icon={Share2} label="Shared with me" count={clips.filter((c) => c.createdBy !== me).length} keys={['kind', 'owner']} />
       </Group>
     </SidebarShell>
   )
@@ -336,6 +377,10 @@ function SettingsSidebar() {
         <Row to="/app/settings?tab=members" icon={Users} label="Members" keys={['tab']} />
         <Row to="/app/settings?tab=data" icon={Database} label="Import & export" keys={['tab']} />
         <Row to="/app/settings?tab=notifications" icon={Bell} label="Notifications" keys={['tab']} />
+      </Group>
+      <Group label="Features">
+        <Row to="/app/settings?tab=tags" icon={TagIcon} label="Tag manager" keys={['tab']} />
+        <Row to="/app/settings?tab=trash" icon={Trash2} label="Trash" keys={['tab']} />
       </Group>
       <Group label="Connections">
         <Row to="/app/apps" icon={Zap} label="App Center" prefix />
@@ -387,6 +432,8 @@ export default function SectionSidebar() {
   const { pathname } = useLocation()
   switch (sectionOf(pathname)) {
     case 'home':
+    case 'comments':
+    case 'meetings':
       return <HomeSidebar />
     case 'inbox':
       return <InboxSidebar />
@@ -405,11 +452,7 @@ export default function SectionSidebar() {
     case 'timesheets':
       return <TimeSidebar />
     case 'dashboards':
-      return (
-        <SidebarShell title="Dashboards">
-          <ProjectFilter path="/app/dashboards" all="All spaces" />
-        </SidebarShell>
-      )
+      return <DashboardsSidebar />
     case 'sprints':
       return <SprintsSidebar />
     case 'automations':

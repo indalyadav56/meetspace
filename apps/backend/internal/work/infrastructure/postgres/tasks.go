@@ -77,11 +77,11 @@ func customValue(m map[string]any) any {
 }
 
 func (r *Repository) GetTask(ctx context.Context, ws, id string) (*domain.Task, error) {
-	return scanTask(r.db.QueryRowContext(ctx, `SELECT `+taskCols+` FROM work.tasks WHERE workspace_id=$1 AND id=$2`, ws, id))
+	return scanTask(r.db.QueryRowContext(ctx, `SELECT `+taskCols+` FROM work.tasks WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL`, ws, id))
 }
 
 func (r *Repository) GetTaskByKey(ctx context.Context, ws string, key int64) (*domain.Task, error) {
-	return scanTask(r.db.QueryRowContext(ctx, `SELECT `+taskCols+` FROM work.tasks WHERE workspace_id=$1 AND key=$2`, ws, key))
+	return scanTask(r.db.QueryRowContext(ctx, `SELECT `+taskCols+` FROM work.tasks WHERE workspace_id=$1 AND key=$2 AND deleted_at IS NULL`, ws, key))
 }
 
 func (r *Repository) queryTasks(ctx context.Context, q string, args ...any) ([]domain.Task, error) {
@@ -102,7 +102,7 @@ func (r *Repository) queryTasks(ctx context.Context, q string, args ...any) ([]d
 }
 
 func (r *Repository) ListTasks(ctx context.Context, ws string) ([]domain.Task, error) {
-	return r.queryTasks(ctx, `SELECT `+taskCols+` FROM work.tasks WHERE workspace_id=$1 ORDER BY position`, ws)
+	return r.queryTasks(ctx, `SELECT `+taskCols+` FROM work.tasks WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY position`, ws)
 }
 
 func (r *Repository) UpdateTask(ctx context.Context, t *domain.Task) error {
@@ -117,13 +117,7 @@ func (r *Repository) UpdateTask(ctx context.Context, t *domain.Task) error {
 		pgjson.Value(t.Watchers), pgjson.Value(t.ClipIDs), t.Order).Scan(&t.UpdatedAt)
 }
 
-func (r *Repository) DeleteTask(ctx context.Context, ws, id string) ([]string, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		WITH RECURSIVE tree AS (
-		  SELECT id FROM work.tasks WHERE workspace_id=$1 AND id=$2
-		  UNION ALL SELECT t.id FROM work.tasks t JOIN tree ON t.parent_id = tree.id
-		)
-		DELETE FROM work.tasks WHERE id IN (SELECT id FROM tree) RETURNING id`, ws, id)
+func scanIDs(rows *sql.Rows, err error) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +136,65 @@ func (r *Repository) DeleteTask(ctx context.Context, ws, id string) ([]string, e
 	return ids, rows.Err()
 }
 
+// DeleteTask moves the task and its subtasks to the trash (one shared deleted_at) and returns their ids.
+func (r *Repository) DeleteTask(ctx context.Context, ws, id, actorID string) ([]string, error) {
+	return scanIDs(r.db.QueryContext(ctx, `
+		WITH RECURSIVE tree AS (
+		  SELECT id FROM work.tasks WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL
+		  UNION ALL SELECT t.id FROM work.tasks t JOIN tree ON t.parent_id = tree.id WHERE t.deleted_at IS NULL
+		)
+		UPDATE work.tasks SET deleted_at = now(), deleted_by = NULLIF($3, '')::uuid WHERE id IN (SELECT id FROM tree) RETURNING id`, ws, id, actorID))
+}
+
+// RestoreTask brings back a trashed task and the subtasks that were trashed with it.
+func (r *Repository) RestoreTask(ctx context.Context, ws, id string) ([]domain.Task, error) {
+	tasks, err := r.queryTasks(ctx, `
+		WITH RECURSIVE root AS (
+		  SELECT id, deleted_at FROM work.tasks WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NOT NULL
+		), tree AS (
+		  SELECT id FROM root
+		  UNION ALL SELECT t.id FROM work.tasks t JOIN tree ON t.parent_id = tree.id JOIN root ON t.deleted_at = root.deleted_at
+		)
+		UPDATE work.tasks SET deleted_at = NULL, deleted_by = NULL, updated_at = now() WHERE id IN (SELECT id FROM tree) RETURNING `+taskCols, ws, id)
+	if err == nil && len(tasks) == 0 {
+		return nil, domain.ErrTaskNotFound
+	}
+	return tasks, err
+}
+
+// PurgeTask permanently deletes a trashed task and everything under it.
+func (r *Repository) PurgeTask(ctx context.Context, ws, id string) ([]string, error) {
+	return scanIDs(r.db.QueryContext(ctx, `
+		WITH RECURSIVE tree AS (
+		  SELECT id FROM work.tasks WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NOT NULL
+		  UNION ALL SELECT t.id FROM work.tasks t JOIN tree ON t.parent_id = tree.id
+		)
+		DELETE FROM work.tasks WHERE id IN (SELECT id FROM tree) RETURNING id`, ws, id))
+}
+
+// ListTrash returns trashed tasks that were deleted on their own (not with a trashed parent).
+func (r *Repository) ListTrash(ctx context.Context, ws string) ([]domain.TrashedTask, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT t.id, t.key, t.title, t.list_id, t.deleted_at, COALESCE(t.deleted_by::text, ''),
+		  (SELECT count(*) FROM work.tasks c WHERE c.parent_id = t.id AND c.deleted_at = t.deleted_at)
+		FROM work.tasks t LEFT JOIN work.tasks p ON p.id = t.parent_id
+		WHERE t.workspace_id=$1 AND t.deleted_at IS NOT NULL AND (p.id IS NULL OR p.deleted_at IS DISTINCT FROM t.deleted_at)
+		ORDER BY t.deleted_at DESC LIMIT 500`, ws)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []domain.TrashedTask{}
+	for rows.Next() {
+		var x domain.TrashedTask
+		if err := rows.Scan(&x.ID, &x.Key, &x.Title, &x.ListID, &x.DeletedAt, &x.DeletedBy, &x.Subtasks); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) RemoveFromBlockedBy(ctx context.Context, ws string, ids []string) ([]domain.Task, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -150,7 +203,7 @@ func (r *Repository) RemoveFromBlockedBy(ctx context.Context, ws string, ids []s
 	return r.queryTasks(ctx, `
 		UPDATE work.tasks SET blocked_by = COALESCE((SELECT jsonb_agg(x) FROM jsonb_array_elements_text(blocked_by) x WHERE x <> ALL(string_to_array($2, ','))), '[]'::jsonb),
 		  updated_at = now()
-		WHERE workspace_id=$1 AND blocked_by ?| string_to_array($2, ',') RETURNING `+taskCols, ws, strings.Join(ids, ","))
+		WHERE workspace_id=$1 AND deleted_at IS NULL AND blocked_by ?| string_to_array($2, ',') RETURNING `+taskCols, ws, strings.Join(ids, ","))
 }
 
 func (r *Repository) MaxOrder(ctx context.Context, ws string) (float64, error) {

@@ -13,6 +13,10 @@ export interface SavedAgent {
   description: string
   instructions: string
   icon: string
+  /** "skill": a reusable workflow; otherwise a persona agent. */
+  kind?: 'agent' | 'skill'
+  enabled?: boolean
+  createdBy?: string | null
 }
 
 export interface ChatItem {

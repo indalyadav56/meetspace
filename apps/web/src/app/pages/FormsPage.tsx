@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowLeft, ArrowUp, Check, ClipboardList, Copy, ExternalLink, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowUp, Check, ClipboardList, Copy, ExternalLink, Plus, Search, Star, Trash2 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { Form, FormField, FormFieldKind, FormFieldTarget } from '../../store/types'
 import { Avatar } from '../components/ui'
 import FormView from '../forms/FormView'
 import { SPACE_COLORS, cn, timeAgo, uid } from '../../lib/utils'
+import { useQueryState } from '../../lib/useQueryState'
 
 const KINDS: { kind: FormFieldKind; label: string }[] = [
   { kind: 'short', label: 'Short text' },
@@ -28,17 +29,60 @@ export default function FormsPage() {
   return form ? <FormBuilder key={form.id} form={form} /> : <FormsIndex />
 }
 
+const viewed = {
+  all: (): Record<string, string> => {
+    try {
+      return JSON.parse(localStorage.getItem('ms.forms.viewed') ?? '{}')
+    } catch {
+      return {}
+    }
+  },
+  mark: (id: string) => {
+    try {
+      localStorage.setItem('ms.forms.viewed', JSON.stringify({ ...viewed.all(), [id]: new Date().toISOString() }))
+    } catch {
+      /* storage blocked */
+    }
+  },
+}
+
+type FormSort = 'viewed' | 'name' | 'responses' | 'created'
+
 function FormsIndex() {
-  const { forms, lists, addForm, updateForm } = useStore()
+  const { forms, lists, spaces, favorites, addForm, updateForm, toggleFavorite } = useStore()
   const nav = useNavigate()
+  const [filter] = useQueryState<'all' | 'active' | 'closed' | 'favorites'>('in', 'all')
   const [listId, setListId] = useState(lists[0]?.id ?? '')
   const [copied, setCopied] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+  const [sort, setSort] = useState<FormSort>('viewed')
+  const seen = useMemo(() => viewed.all(), [])
+  const where = (f: Form) => {
+    const l = lists.find((x) => x.id === f.listId)
+    return l ? `${spaces.find((sp) => sp.id === l.spaceId)?.name ?? ''} / ${l.name}` : 'Deleted List'
+  }
+  const shown = forms
+    .filter((f) => (filter === 'active' ? f.active : filter === 'closed' ? !f.active : filter === 'favorites' ? favorites.includes(f.id) : true))
+    .filter((f) => f.title.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) =>
+      sort === 'name' ? a.title.localeCompare(b.title) : sort === 'responses' ? b.submissions - a.submissions : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : (seen[b.id] ?? b.createdAt).localeCompare(seen[a.id] ?? a.createdAt),
+    )
+  const head = (key: FormSort | null, label: string) =>
+    key ? (
+      <button onClick={() => setSort(key)} className={cn('text-left hover:text-[var(--text)]', sort === key && 'text-brand-600')}>
+        {label}
+        {sort === key && ' ↓'}
+      </button>
+    ) : (
+      <span>{label}</span>
+    )
+  const cols = 'grid-cols-[minmax(200px,1fr)_170px_90px_110px_90px_90px_96px]'
   return (
     <div className="h-full overflow-y-auto scroll-thin">
-      <div className="mx-auto max-w-5xl p-4 sm:p-6">
+      <div className="mx-auto max-w-6xl p-4 sm:p-6">
         <div className="mb-5 flex flex-wrap items-center gap-3">
           <ClipboardList size={20} className="text-brand-600" />
-          <h1 className="text-xl font-bold">Forms</h1>
+          <h1 className="text-xl font-bold">{filter === 'active' ? 'Active forms' : filter === 'closed' ? 'Closed forms' : filter === 'favorites' ? 'Favorite forms' : 'Forms'}</h1>
           <span className="text-muted text-sm">Every response becomes a task.</span>
           <div className="ml-auto flex items-center gap-2">
             <select value={listId} onChange={(e) => setListId(e.target.value)} className="border-app surface h-8 rounded-md border px-2 text-sm" aria-label="List for new form">
@@ -53,41 +97,71 @@ function FormsIndex() {
             </button>
           </div>
         </div>
-        {forms.length === 0 && <p className="text-muted border-app rounded-xl border border-dashed p-10 text-center text-sm">No forms yet. Create one to collect bug reports, requests or intake from anyone.</p>}
-        <div className="grid gap-3 sm:grid-cols-2">
-          {forms.map((f) => (
-            <div key={f.id} className="border-app overflow-hidden rounded-xl border">
-              <div className="h-1.5" style={{ background: f.color }} />
-              <div className="p-4">
-                <Link to={`/app/forms/${f.id}`} className="block truncate font-semibold hover:underline">
-                  {f.title}
-                </Link>
-                <div className="text-muted mt-0.5 text-xs">
-                  Creates tasks in {lists.find((l) => l.id === f.listId)?.name ?? 'a deleted List'} · {f.fields.length} questions · created {timeAgo(f.createdAt)}
-                </div>
-                <div className="mt-3 flex items-center gap-2 text-xs">
-                  <span className="surface-muted rounded-full px-2 py-0.5 font-semibold">{f.submissions} responses</span>
-                  <label className="flex items-center gap-1.5">
-                    <input type="checkbox" checked={f.active} onChange={(e) => updateForm(f.id, { active: e.target.checked })} className="accent-brand-600" /> Accepting responses
-                  </label>
-                  <button
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(formLink(f.id))
-                      setCopied(f.id)
-                      setTimeout(() => setCopied(null), 1200)
-                    }}
-                    className="hover-surface text-muted ml-auto flex items-center gap-1 rounded px-1.5 py-0.5"
-                  >
-                    {copied === f.id ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />} Link
-                  </button>
-                  <a href={`/form/${f.id}`} target="_blank" rel="noreferrer" className="hover-surface text-muted flex items-center gap-1 rounded px-1.5 py-0.5">
-                    <ExternalLink size={13} /> Open
-                  </a>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-faint text-xs">
+            {shown.length} form{shown.length === 1 ? '' : 's'} · {shown.reduce((n, f) => n + f.submissions, 0)} responses
+          </span>
+          <div className="border-app ml-auto flex h-8 items-center gap-2 rounded-md border px-2">
+            <Search size={14} className="text-faint" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search forms" className="w-44 bg-transparent text-sm outline-none" />
+          </div>
         </div>
+        {shown.length === 0 ? (
+          <p className="text-muted border-app rounded-xl border border-dashed p-10 text-center text-sm">{forms.length ? 'No forms match.' : 'No forms yet. Create one to collect bug reports, requests or intake from anyone.'}</p>
+        ) : (
+          <div className="border-app overflow-x-auto rounded-xl border">
+            <div className="min-w-[960px]">
+              <div className={cn('text-faint border-app grid gap-2 border-b px-4 py-2 text-xs font-medium', cols)}>
+                {head('name', 'Name')}
+                {head(null, 'Location')}
+                {head('responses', 'Responses')}
+                {head(null, 'Status')}
+                {head('created', 'Created')}
+                {head('viewed', 'Viewed')}
+                <span />
+              </div>
+              {shown.map((f) => (
+                <div key={f.id} className={cn('border-app hover-surface group grid items-center gap-2 border-b px-4 py-2 text-sm last:border-b-0', cols)}>
+                  <Link to={`/app/forms/${f.id}`} className="flex min-w-0 items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: f.color }} />
+                    <span className="truncate font-medium hover:underline">{f.title}</span>
+                    <span className="text-faint shrink-0 text-xs">{f.fields.length} questions</span>
+                  </Link>
+                  <span className="text-muted truncate text-xs" title={where(f)}>
+                    {where(f)}
+                  </span>
+                  <span className="text-xs font-semibold tabular-nums">{f.submissions}</span>
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <input type="checkbox" checked={f.active} onChange={(e) => updateForm(f.id, { active: e.target.checked })} className="accent-brand-600" aria-label={`Accepting responses for ${f.title}`} />
+                    <span className={f.active ? 'text-emerald-600' : 'text-faint'}>{f.active ? 'Active' : 'Closed'}</span>
+                  </label>
+                  <span className="text-muted text-xs">{timeAgo(f.createdAt)}</span>
+                  <span className="text-muted text-xs">{seen[f.id] ? timeAgo(seen[f.id]) : '—'}</span>
+                  <span className="flex items-center justify-end gap-1">
+                    <button onClick={() => toggleFavorite(f.id)} aria-label="Toggle favorite" className="p-0.5">
+                      <Star size={14} className={favorites.includes(f.id) ? 'fill-amber-400 text-amber-400' : 'text-faint opacity-0 group-hover:opacity-100'} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(formLink(f.id))
+                        setCopied(f.id)
+                        setTimeout(() => setCopied(null), 1200)
+                      }}
+                      className="text-faint hover:text-app rounded p-0.5"
+                      title="Copy link"
+                      aria-label={`Copy link to ${f.title}`}
+                    >
+                      {copied === f.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                    </button>
+                    <a href={`/form/${f.id}`} target="_blank" rel="noreferrer" className="text-faint hover:text-app rounded p-0.5" title="Open form" aria-label={`Open ${f.title}`}>
+                      <ExternalLink size={14} />
+                    </a>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -98,6 +172,7 @@ function FormBuilder({ form }: { form: Form }) {
   const nav = useNavigate()
   const listFields = customFields.filter((cf) => cf.listId === form.listId)
   const up = (patch: Partial<Form>) => updateForm(form.id, patch)
+  useEffect(() => viewed.mark(form.id), [form.id])
   const setField = (id: string, patch: Partial<FormField>) => up({ fields: form.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) })
   const move = (i: number, d: -1 | 1) => {
     const next = [...form.fields]

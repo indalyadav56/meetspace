@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Bell, CalendarClock, CheckSquare, FileText, Keyboard, ListChecks, LogOut, Menu, MessageSquareText, Moon, PanelLeft, Pause, PenTool, Plus, Search, Settings, Sparkles, Sun, Target } from 'lucide-react'
+import { Bell, BellOff, CalendarClock, CheckSquare, FileText, ListChecks, LogOut, Menu, MessageSquareText, PanelLeft, Pause, PenTool, Plus, Search, Sparkles, Target } from 'lucide-react'
 import { clock, useElapsed } from './task/TaskExtras'
 import { useMe, useStore } from '../store/useStore'
 import { Avatar, Logo, MenuItem, Modal, Popover, usePopover } from './components/ui'
@@ -10,10 +10,22 @@ import { useAssistant } from './ai/useAssistant'
 import { CallPill } from './calls/CallLayer'
 import QuickActions from './QuickActions'
 import { useCall } from './calls/useCall'
+import AccountMenu, { liveStatus } from './AccountMenu'
+import { isMuted, usePersonal } from './personal'
 
 export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
   const me = useMe()
-  const { theme, setTheme, logout, toggleSidebar, lists, addTask, openTask } = useStore()
+  const { logout, toggleSidebar, lists, addTask, openTask } = useStore()
+  const myStatus = liveStatus(me)
+  const mutedUntil = usePersonal((s) => s.mutedUntil)
+  const muted = isMuted(mutedUntil)
+  // Re-render when a mute runs out so the bell comes back on its own.
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (!muted || !mutedUntil) return
+    const t = setTimeout(() => tick((n) => n + 1), Math.min(new Date(mutedUntil).getTime() - Date.now() + 500, 2 ** 31 - 1))
+    return () => clearTimeout(t)
+  }, [muted, mutedUntil])
   const unread = useStore((s) => s.notifications.filter((n) => !n.read && !n.cleared).length)
   const nav = useNavigate()
   const userMenu = usePopover()
@@ -117,36 +129,16 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
         </MenuItem>
       </Popover>
 
-      <Link to="/app/inbox" className="hover-surface text-muted relative rounded-md p-1.5" aria-label="Inbox">
-        <Bell size={18} />
-        {unread > 0 && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />}
+      <Link to="/app/inbox" className="hover-surface text-muted relative rounded-md p-1.5" aria-label={muted ? 'Inbox (notifications muted)' : 'Inbox'} title={muted ? 'Notifications are muted' : undefined}>
+        {muted ? <BellOff size={18} className="text-amber-500" /> : <Bell size={18} />}
+        {unread > 0 && !muted && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />}
       </Link>
 
-      <button onClick={userMenu.toggle} className="rounded-full" aria-label="Account menu">
+      <button onClick={userMenu.toggle} className="relative rounded-full" aria-label="Account menu" title={myStatus ? `${myStatus.emoji} ${myStatus.text}`.trim() : undefined}>
         <Avatar userId={me.id} size={28} />
+        {myStatus?.emoji && <span className="surface absolute -right-1.5 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] shadow-sm">{myStatus.emoji}</span>}
       </button>
-      <Popover open={userMenu.open} anchor={userMenu.anchor} onClose={userMenu.close} align="end" width={240}>
-        <div className="flex items-center gap-2 px-2 py-2">
-          <Avatar userId={me.id} size={32} />
-          <div className="min-w-0">
-            <div className="truncate font-semibold">{me.name}</div>
-            <div className="text-muted truncate text-xs">{me.email}</div>
-          </div>
-        </div>
-        <div className="border-app my-1 border-t" />
-        <MenuItem onClick={() => (nav('/app/settings'), userMenu.close())}>
-          <Settings size={15} /> Settings & members
-        </MenuItem>
-        <MenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-        </MenuItem>
-        <MenuItem onClick={() => (window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' })), userMenu.close())}>
-          <Keyboard size={15} /> Keyboard shortcuts
-        </MenuItem>
-        <MenuItem onClick={() => (userMenu.close(), setConfirmLogout(true))}>
-          <LogOut size={15} /> Log out
-        </MenuItem>
-      </Popover>
+      <AccountMenu open={userMenu.open} anchor={userMenu.anchor} onClose={userMenu.close} onLogout={() => setConfirmLogout(true)} />
       <LogoutDialog
         open={confirmLogout}
         onClose={() => setConfirmLogout(false)}

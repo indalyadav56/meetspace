@@ -13,14 +13,14 @@ type Agents struct{ db *sql.DB }
 
 func NewAgents(db *sql.DB) *Agents { return &Agents{db: db} }
 
-const cols = `id, workspace_id, name, description, instructions, icon, created_by, created_at, updated_at`
+const cols = `id, workspace_id, name, description, instructions, icon, kind, enabled, created_by, created_at, updated_at`
 
 type row interface{ Scan(...any) error }
 
 func scan(r row) (*domain.Agent, error) {
 	var a domain.Agent
 	var by sql.NullString
-	if err := r.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Description, &a.Instructions, &a.Icon, &by, &a.CreatedAt, &a.UpdatedAt); err != nil {
+	if err := r.Scan(&a.ID, &a.WorkspaceID, &a.Name, &a.Description, &a.Instructions, &a.Icon, &a.Kind, &a.Enabled, &by, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if by.Valid {
@@ -56,16 +56,16 @@ func (r *Agents) Get(ctx context.Context, ws, id string) (*domain.Agent, error) 
 
 func (r *Agents) Create(ctx context.Context, a *domain.Agent) error {
 	return r.db.QueryRowContext(ctx, `
-		INSERT INTO assistant.agents (id, workspace_id, name, description, instructions, icon, created_by)
-		VALUES (COALESCE(NULLIF($7, '')::uuid, uuidv7()), $1,$2,$3,$4,$5,$6) RETURNING id, created_at, updated_at`,
-		a.WorkspaceID, a.Name, a.Description, a.Instructions, a.Icon, a.CreatedBy, a.ID).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
+		INSERT INTO assistant.agents (id, workspace_id, name, description, instructions, icon, created_by, kind, enabled)
+		VALUES (COALESCE(NULLIF($7, '')::uuid, uuidv7()), $1,$2,$3,$4,$5,$6,$8,$9) RETURNING id, created_at, updated_at`,
+		a.WorkspaceID, a.Name, a.Description, a.Instructions, a.Icon, a.CreatedBy, a.ID, a.Kind, a.Enabled).Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt)
 }
 
 func (r *Agents) Update(ctx context.Context, a *domain.Agent) error {
 	return r.db.QueryRowContext(ctx, `
-		UPDATE assistant.agents SET name=$3, description=$4, instructions=$5, icon=$6, updated_at=now()
+		UPDATE assistant.agents SET name=$3, description=$4, instructions=$5, icon=$6, enabled=$7, updated_at=now()
 		WHERE workspace_id=$1 AND id=$2 RETURNING updated_at`,
-		a.WorkspaceID, a.ID, a.Name, a.Description, a.Instructions, a.Icon).Scan(&a.UpdatedAt)
+		a.WorkspaceID, a.ID, a.Name, a.Description, a.Instructions, a.Icon, a.Enabled).Scan(&a.UpdatedAt)
 }
 
 func (r *Agents) Delete(ctx context.Context, ws, id string) error {

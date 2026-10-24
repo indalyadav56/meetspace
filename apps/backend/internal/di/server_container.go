@@ -160,6 +160,17 @@ func NewServerContainer(ctx context.Context, sh *Shared) (*ServerContainer, erro
 	boot := &bootstraps{}
 	wsSvc := workspaceapp.NewService(workspacepg.NewRepository(db), hub, userSvc, dir, inviteMailer{auth: authSvc, names: dir, log: log}, boot)
 	mentions := mentionResolver{workspaces: wsSvc, users: userSvc}
+	// Profile and status edits reach everyone who shares a workspace with the person.
+	userSvc.OnChange = func(ctx context.Context, p identityapp.Profile) {
+		wss, err := wsSvc.ListForUser(ctx, p.ID)
+		if err != nil {
+			log.Warn("profile broadcast", zap.Error(err))
+			return
+		}
+		for _, w := range wss {
+			hub.Publish(ctx, w.ID, "users", "upsert", profileMap(p), nil)
+		}
+	}
 
 	// work, chat, docs, goals
 	workSvc := workapp.NewService(workpg.NewRepository(db), hub, notifySvc, wsSvc, wsSvc, dir, log)

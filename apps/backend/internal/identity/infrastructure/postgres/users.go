@@ -17,12 +17,12 @@ type UserRepository struct{ db *sql.DB }
 
 func NewUserRepository(db *sql.DB) *UserRepository { return &UserRepository{db: db} }
 
-const userCols = `id, email, full_name, color, password_hash, is_active, last_login_at, created_at, updated_at`
+const userCols = `id, email, full_name, color, status_emoji, status_text, status_until, password_hash, is_active, last_login_at, created_at, updated_at`
 
 func scanUser(row interface{ Scan(...any) error }) (*domain.User, error) {
 	var u domain.User
-	var last sql.NullTime
-	if err := row.Scan(&u.ID, &u.Email, &u.FullName, &u.Color, &u.PasswordHash, &u.IsActive, &last, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	var last, until sql.NullTime
+	if err := row.Scan(&u.ID, &u.Email, &u.FullName, &u.Color, &u.StatusEmoji, &u.StatusText, &until, &u.PasswordHash, &u.IsActive, &last, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrUserNotFound
 		}
@@ -30,6 +30,9 @@ func scanUser(row interface{ Scan(...any) error }) (*domain.User, error) {
 	}
 	if last.Valid {
 		u.LastLoginAt = &last.Time
+	}
+	if until.Valid {
+		u.StatusUntil = &until.Time
 	}
 	return &u, nil
 }
@@ -82,6 +85,11 @@ func (r *UserRepository) ListByIDs(ctx context.Context, ids []string) ([]domain.
 
 func (r *UserRepository) UpdateProfile(ctx context.Context, id, fullName, color string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE auth.users SET full_name=$2, color=$3, updated_at=now() WHERE id=$1`, id, fullName, color)
+	return err
+}
+
+func (r *UserRepository) UpdateStatus(ctx context.Context, id, emoji, text string, until *time.Time) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE auth.users SET status_emoji=$2, status_text=$3, status_until=$4, updated_at=now() WHERE id=$1`, id, emoji, text, until)
 	return err
 }
 

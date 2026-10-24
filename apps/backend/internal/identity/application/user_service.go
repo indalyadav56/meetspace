@@ -4,6 +4,8 @@ import (
 	"context"
 	"regexp"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/indalyadav56/meetspace/backend/internal/identity/domain"
 	"github.com/indalyadav56/meetspace/backend/pkg/apperror"
@@ -13,18 +15,69 @@ var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 // Profile is the public view of a user shared with other contexts and clients.
 type Profile struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Color string `json:"color"`
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Email  string  `json:"email"`
+	Color  string  `json:"color"`
+	Status *Status `json:"status,omitempty"`
+}
+
+// Status is a short message teammates see next to someone's avatar.
+type Status struct {
+	Emoji string     `json:"emoji"`
+	Text  string     `json:"text"`
+	Until *time.Time `json:"until,omitempty"`
 }
 
 func toProfile(u domain.User) Profile {
-	return Profile{ID: u.ID, Name: u.FullName, Email: u.Email, Color: u.Color}
+	p := Profile{ID: u.ID, Name: u.FullName, Email: u.Email, Color: u.Color}
+	if (u.StatusEmoji != "" || u.StatusText != "") && (u.StatusUntil == nil || u.StatusUntil.After(time.Now())) {
+		p.Status = &Status{Emoji: u.StatusEmoji, Text: u.StatusText, Until: u.StatusUntil}
+	}
+	return p
 }
 
 type UserService struct {
 	users domain.UserRepository
+	// OnChange is told about every profile edit so the composition root can
+	// push it to the person's workspaces. Optional.
+	OnChange func(context.Context, Profile)
+}
+
+func (s *UserService) changed(ctx context.Context, p Profile) {
+	if s.OnChange != nil {
+		s.OnChange(ctx, p)
+	}
+}
+
+// SetStatus replaces the caller's status; nil clears it.
+func (s *UserService) SetStatus(ctx context.Context, id string, st *Status) (Profile, error) {
+	u, err := s.users.GetByID(ctx, id)
+	if err != nil {
+		return Profile{}, err
+	}
+	u.StatusEmoji, u.StatusText, u.StatusUntil = "", "", nil
+	if st != nil {
+		emoji, text := strings.TrimSpace(st.Emoji), strings.TrimSpace(st.Text)
+		if utf8.RuneCountInString(emoji) > 8 || len(emoji) > 16 {
+			return Profile{}, apperror.Invalid("invalid_status", "status emoji is too long")
+		}
+		if utf8.RuneCountInString(text) > 100 {
+			return Profile{}, apperror.Invalid("invalid_status", "status must be 100 characters or fewer")
+		}
+		if st.Until != nil && !st.Until.After(time.Now()) {
+			return Profile{}, apperror.Invalid("invalid_status", "clear-after time must be in the future")
+		}
+		if emoji != "" || text != "" {
+			u.StatusEmoji, u.StatusText, u.StatusUntil = emoji, text, st.Until
+		}
+	}
+	if err := s.users.UpdateStatus(ctx, id, u.StatusEmoji, u.StatusText, u.StatusUntil); err != nil {
+		return Profile{}, err
+	}
+	p := toProfile(*u)
+	s.changed(ctx, p)
+	return p, nil
 }
 
 func NewUserService(users domain.UserRepository) *UserService { return &UserService{users: users} }
@@ -58,7 +111,9 @@ func (s *UserService) UpdateMe(ctx context.Context, id string, fullName, color *
 	if err := s.users.UpdateProfile(ctx, id, u.FullName, u.Color); err != nil {
 		return Profile{}, err
 	}
-	return toProfile(*u), nil
+	p := toProfile(*u)
+	s.changed(ctx, p)
+	return p, nil
 }
 
 // Profiles resolves user ids to public profiles (missing ids are skipped).

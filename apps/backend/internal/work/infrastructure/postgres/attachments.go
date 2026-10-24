@@ -144,7 +144,7 @@ func (r *Repository) DeleteField(ctx context.Context, ws, id string) error {
 }
 
 func (r *Repository) RemoveCustomValue(ctx context.Context, ws, fieldID string) ([]domain.Task, error) {
-	return r.queryTasks(ctx, `UPDATE work.tasks SET custom = custom - $2, updated_at=now() WHERE workspace_id=$1 AND custom ? $2 RETURNING `+taskCols, ws, fieldID)
+	return r.queryTasks(ctx, `UPDATE work.tasks SET custom = custom - $2, updated_at=now() WHERE workspace_id=$1 AND deleted_at IS NULL AND custom ? $2 RETURNING `+taskCols, ws, fieldID)
 }
 
 // ---- time tracking

@@ -446,3 +446,32 @@ body {
 .dark .prose-doc .hljs-property {
   color: #c4b5fd;
 }
+
+/* Call screens follow the theme: warm stone in light mode, deep lagoon in dark. */
+.call-ui {
+  --call-bg: #efede7;
+  --call-tile: linear-gradient(160deg, #e2f1ec, #e7e4dd);
+  --call-panel: var(--bg);
+  --call-chip: rgb(255 255 255 / 0.88);
+  --call-chip-text: #1d1b18;
+  background: var(--call-bg);
+  color: var(--text);
+}
+.dark .call-ui {
+  --call-bg: #0c1412;
+  --call-tile: linear-gradient(160deg, #12302b, #131b19);
+  --call-panel: #121a18;
+  --call-chip: rgb(3 40 37 / 0.78);
+  --call-chip-text: #eefbf8;
+}
+.call-tile {
+  background: var(--call-tile);
+}
+.call-panel {
+  background: var(--call-panel);
+}
+.call-chip {
+  background: var(--call-chip);
+  color: var(--call-chip-text);
+  backdrop-filter: blur(6px);
+}

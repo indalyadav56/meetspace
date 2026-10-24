@@ -33,8 +33,11 @@ type Repository interface {
 	GetTaskByKey(ctx context.Context, workspaceID string, key int64) (*Task, error)
 	ListTasks(ctx context.Context, workspaceID string) ([]Task, error)
 	UpdateTask(ctx context.Context, t *Task) error
-	// DeleteTask removes the task and its subtasks and returns every deleted id.
-	DeleteTask(ctx context.Context, workspaceID, id string) ([]string, error)
+	// DeleteTask moves the task and its subtasks to the trash and returns every affected id.
+	DeleteTask(ctx context.Context, workspaceID, id, actorID string) ([]string, error)
+	RestoreTask(ctx context.Context, workspaceID, id string) ([]Task, error)
+	PurgeTask(ctx context.Context, workspaceID, id string) ([]string, error)
+	ListTrash(ctx context.Context, workspaceID string) ([]TrashedTask, error)
 	// RemoveFromBlockedBy strips deleted ids from other tasks' dependencies and returns the changed tasks.
 	RemoveFromBlockedBy(ctx context.Context, workspaceID string, ids []string) ([]Task, error)
 	MaxOrder(ctx context.Context, workspaceID string) (float64, error)

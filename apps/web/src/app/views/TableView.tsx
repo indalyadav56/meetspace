@@ -12,6 +12,8 @@ import type { ViewProps } from './ListView'
 
 type Col = 'status' | 'assignees' | 'priority' | 'start' | 'due' | 'estimate' | 'points' | 'tracked' | 'tags' | 'list' | 'created' | 'updated' | `cf:${ID}`
 type GroupBy = 'none' | 'status' | 'list' | 'assignee' | 'priority'
+type Calc = 'none' | 'sum' | 'avg' | 'min' | 'max' | 'count'
+const CALC_LABEL: Record<Calc, string> = { none: 'Calculate', sum: 'Sum', avg: 'Average', min: 'Min', max: 'Max', count: 'Count filled' }
 const BUILTIN: Record<Exclude<Col, `cf:${ID}`>, string> = {
   status: 'Status',
   assignees: 'Assignees',
@@ -31,13 +33,13 @@ const DEFAULT_COLS: Col[] = ['status', 'assignees', 'priority', 'start', 'due', 
 function usePrefs(key: string) {
   const read = () => {
     try {
-      return JSON.parse(localStorage.getItem(`ms.table.${key}`) ?? '{}') as { cols?: Col[]; group?: GroupBy }
+      return JSON.parse(localStorage.getItem(`ms.table.${key}`) ?? '{}') as { cols?: Col[]; group?: GroupBy; calc?: Record<string, Calc> }
     } catch {
       return {}
     }
   }
   const [p, setP] = useState(read)
-  const set = (patch: { cols?: Col[]; group?: GroupBy }) =>
+  const set = (patch: { cols?: Col[]; group?: GroupBy; calc?: Record<string, Calc> }) =>
     setP((cur) => {
       const next = { ...cur, ...patch }
       try {
@@ -163,6 +165,22 @@ export default function TableView({ tasks, defaultListId, viewKey, mixed }: View
       else next.add(id)
       return next
     })
+
+  /** Numeric columns can be summed etc.; every column can count filled cells. */
+  const numeric = (c: Col) => c === 'estimate' || c === 'points' || c === 'tracked' || ['number', 'money'].includes(fieldOf(c)?.type ?? '')
+  const calcOf = (c: Col): Calc => prefs.calc?.[c] ?? 'none'
+  const calcValue = (c: Col) => {
+    const how = calcOf(c)
+    if (how === 'none') return ''
+    const vals = rows.map((t) => value(t, c)).filter((v) => v !== '' && v !== 0)
+    if (how === 'count') return String(vals.length)
+    const nums = vals.map(Number).filter((n) => Number.isFinite(n))
+    if (!nums.length) return '—'
+    const n = how === 'sum' ? nums.reduce((a, b) => a + b, 0) : how === 'avg' ? nums.reduce((a, b) => a + b, 0) / nums.length : how === 'min' ? Math.min(...nums) : Math.max(...nums)
+    if (c === 'tracked') return formatMinutes(Math.round(n))
+    const out = Math.round(n * 100) / 100
+    return c === 'estimate' ? `${out}h` : fieldOf(c)?.type === 'money' ? `$${out.toLocaleString()}` : String(out)
+  }
 
   const exportCsv = () => {
     const head = ['ID', 'Task name', ...cols.map(label)]
@@ -382,6 +400,28 @@ export default function TableView({ tasks, defaultListId, viewKey, mixed }: View
                 </Fragment>
               )
             })}
+            <tr>
+              <td className={cn(td, pin, 'left-0 surface-subtle')} />
+              <td className={cn(td, pin, 'left-10 surface-subtle')} />
+              <td className={cn(td, pin, 'text-faint left-[104px] surface-subtle text-xs shadow-[1px_0_0_var(--border)]')}>{rows.length} tasks</td>
+              {cols.map((c) => (
+                <td key={c} className={cn(td, 'surface-subtle py-1')}>
+                  <select
+                    value={calcOf(c)}
+                    onChange={(e) => setPrefs({ calc: { ...prefs.calc, [c]: e.target.value as Calc } })}
+                    className={cn('w-full bg-transparent text-xs outline-none', calcOf(c) === 'none' ? 'text-faint opacity-0 hover:opacity-100 focus:opacity-100' : 'text-app font-semibold')}
+                    aria-label={`Calculate ${label(c)}`}
+                    title={calcOf(c) === 'none' ? 'Calculate' : CALC_LABEL[calcOf(c)]}
+                  >
+                    {(numeric(c) ? (Object.keys(CALC_LABEL) as Calc[]) : (['none', 'count'] as Calc[])).map((k) => (
+                      <option key={k} value={k}>
+                        {k === 'none' ? 'Calculate' : calcOf(c) === k ? `${CALC_LABEL[k]}: ${calcValue(c)}` : CALC_LABEL[k]}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+              ))}
+            </tr>
             <tr>
               <td className={cn(td, pin, 'left-0')} />
               <td className={td} colSpan={2 + cols.length}>

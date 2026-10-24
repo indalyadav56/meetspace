@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
-import { BellRing, Video, X, CalendarClock, ChevronDown, ChevronRight, Clock, FileText, List as ListIcon, MessageSquare } from 'lucide-react'
+import { BellRing, Video, X, CalendarClock, Clock, FileText, List as ListIcon, MessageSquare, Sparkles, Star } from 'lucide-react'
 import { useMe, useStore } from '../../store/useStore'
-import type { Task } from '../../store/types'
 import { useTaskResolver } from '../hooks'
-import { Avatar, DateButton, PriorityFlag, StatusDot } from '../components/ui'
+import { Avatar, StatusDot } from '../components/ui'
+import HomeComposer from './home/HomeComposer'
+import { MyWork, Priorities, Standup } from './home/HomeCards'
+import MeetingDialog from '../calls/MeetingDialog'
 import { cn, timeAgo } from '../../lib/utils'
 
 function Card({ title, icon: Icon, children, className }: { title: string; icon: typeof Clock; children: React.ReactNode; className?: string }) {
@@ -26,19 +28,7 @@ export default function Home() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  const mine = s.tasks.filter((t) => t.assignees.includes(me.id) && !r.isDone(t))
-  const buckets = useMemo(() => {
-    const b: Record<string, Task[]> = { Overdue: [], Today: [], Next: [], Unscheduled: [] }
-    mine.forEach((t) => {
-      if (!t.dueDate) return b.Unscheduled.push(t)
-      const diff = differenceInCalendarDays(parseISO(t.dueDate), new Date())
-      if (diff < 0) b.Overdue.push(t)
-      else if (diff === 0) b.Today.push(t)
-      else b.Next.push(t)
-    })
-    b.Next.sort((a, c) => (a.dueDate ?? '').localeCompare(c.dueDate ?? ''))
-    return b
-  }, [mine])
+  const [meeting, setMeeting] = useState(false)
 
   const recents = s.recents
     .map((id) => {
@@ -73,13 +63,12 @@ export default function Home() {
         <h1 className="mb-5 text-2xl font-bold tracking-tight">
           {greeting}, {me.name.split(' ')[0]}
         </h1>
+        <HomeComposer onMeeting={() => setMeeting(true)} />
+        {meeting && <MeetingDialog onClose={() => setMeeting(false)} />}
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="My Work" icon={Clock} className="lg:row-span-2 lg:h-[620px]">
-            {Object.entries(buckets).map(([name, list]) => (
-              <Bucket key={name} name={name} tasks={list} defaultOpen={name !== 'Unscheduled'} />
-            ))}
-            {mine.length === 0 && <p className="text-muted px-2 py-6 text-center text-sm">You’re all caught up. 🎉</p>}
+            <MyWork />
           </Card>
 
           <Card title="Recents" icon={Clock} className="h-[300px]">
@@ -137,6 +126,14 @@ export default function Home() {
             ))}
           </Card>
 
+          <Card title="Priorities" icon={Star} className="h-[300px]">
+            <Priorities />
+          </Card>
+
+          <Card title="AI StandUp" icon={Sparkles} className="h-[300px]">
+            <Standup />
+          </Card>
+
           <Card title="Agenda — next 7 days" icon={CalendarClock} className="h-[300px]">
             {agenda.length === 0 && meetingsSoon.length === 0 && <p className="text-muted px-2 py-6 text-center text-sm">Nothing due this week.</p>}
             {meetingsSoon.map((m) => (
@@ -164,33 +161,6 @@ export default function Home() {
           </Card>
         </div>
       </div>
-    </div>
-  )
-}
-
-function Bucket({ name, tasks, defaultOpen }: { name: string; tasks: Task[]; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen)
-  const s = useStore()
-  const r = useTaskResolver()
-  return (
-    <div className="mb-1">
-      <button onClick={() => setOpen((o) => !o)} className="hover-surface flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-semibold">
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span className={cn(name === 'Overdue' && tasks.length > 0 && 'text-red-500')}>{name}</span>
-        <span className="text-faint font-normal">{tasks.length}</span>
-      </button>
-      {open &&
-        tasks.map((t) => (
-          <div key={t.id} onClick={() => s.openTask(t.id)} className="hover-surface flex cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 pl-7 text-sm">
-            <StatusDot status={r.statusOf(t)} size={13} />
-            <span className="truncate">{t.title}</span>
-            <span className="text-faint hidden shrink-0 text-xs sm:inline">{r.listName(t.listId)}</span>
-            <span className="ml-auto flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
-              {t.priority && <PriorityFlag priority={t.priority} />}
-              <DateButton value={t.dueDate} onChange={(v) => s.updateTask(t.id, { dueDate: v })} />
-            </span>
-          </div>
-        ))}
     </div>
   )
 }

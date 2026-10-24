@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowUp, Ban, Sparkles, Eye, BellRing, Phone, Film, Circle as RecordIcon, Gauge, CalendarDays, Check, ChevronRight, CircleDot, Clock, Copy, Flag, Hourglass, Link2, ListChecks, MoreHorizontal, Plus, Repeat, Tag as TagIcon, Timer, Trash2, Users, X, Zap } from 'lucide-react'
+import { ArrowUp, Ban, Sparkles, Eye, BellRing, Phone, Film, Circle as RecordIcon, Gauge, CalendarDays, Check, ChevronRight, CircleDot, Clock, Copy, Flag, Hourglass, Link2, ListChecks, MoreHorizontal, Plus, Repeat, Star, Tag as TagIcon, Timer, Trash2, Users, X, Zap } from 'lucide-react'
 import { BOT, useMe, useStore } from '../../store/useStore'
 import { useAssistant } from '../ai/useAssistant'
 import { useCall } from '../calls/useCall'
@@ -46,6 +46,7 @@ function TaskBody({ id }: { id: string }) {
   const [newSub, setNewSub] = useState('')
   const [newCheck, setNewCheck] = useState('')
   const [copied, setCopied] = useState(false)
+  const [idCopied, setIdCopied] = useState(false)
   const more = usePopover()
   const aiPop = usePopover()
 
@@ -95,8 +96,21 @@ function TaskBody({ id }: { id: string }) {
             )}
           </span>
         )}
-        <span className="text-faint ml-2 hidden sm:inline">MS-{task.key}</span>
+        <button
+          onClick={() => {
+            navigator.clipboard?.writeText(`MS-${task.key}`)
+            setIdCopied(true)
+            setTimeout(() => setIdCopied(false), 1200)
+          }}
+          className="text-faint hover:text-app ml-2 hidden items-center gap-1 rounded px-1 font-mono text-xs sm:inline-flex"
+          title="Copy task ID"
+        >
+          {idCopied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />} MS-{task.key}
+        </button>
         <div className="ml-auto flex items-center gap-1">
+          <button onClick={() => s.toggleFavorite(task.id)} className="hover-surface rounded-md p-1.5" title={s.favorites.includes(task.id) ? 'Remove from favorites' : 'Add to favorites (shows in Priorities)'} aria-label="Favorite task">
+            <Star size={16} className={s.favorites.includes(task.id) ? 'fill-amber-400 text-amber-400' : 'text-muted'} />
+          </button>
           <button
             onClick={() => {
               navigator.clipboard?.writeText(`${location.origin}/app/list/${task.listId}?task=${task.id}`)

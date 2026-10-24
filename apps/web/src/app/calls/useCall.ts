@@ -182,7 +182,11 @@ function syntheticVideo(userId: ID): MediaStreamTrack {
   let t = 0
   const id = window.setInterval(() => {
     t += 1
-    g.fillStyle = '#1f2128'
+    // Brand lagoon gradient: it is sent to everyone, so it doesn't follow one viewer's theme.
+    const bg = g.createLinearGradient(0, 0, 640, 360)
+    bg.addColorStop(0, '#12302b')
+    bg.addColorStop(1, '#131b19')
+    g.fillStyle = bg
     g.fillRect(0, 0, 640, 360)
     const r = 70 + Math.sin(t / 8) * 4
     g.fillStyle = user?.color ?? '#0b7f71'
@@ -190,7 +194,7 @@ function syntheticVideo(userId: ID): MediaStreamTrack {
     g.arc(320, 180, r, 0, Math.PI * 2)
     g.fill()
     g.fillStyle = '#fff'
-    g.font = 'bold 56px Inter, sans-serif'
+    g.font = 'bold 56px Figtree, sans-serif'
     g.textAlign = 'center'
     g.textBaseline = 'middle'
     g.fillText(initials(user?.name ?? '?'), 320, 184)
@@ -528,7 +532,7 @@ function startRecorder(): boolean {
     const s = useCall.getState()
     const tiles = [{ key: 'local', userId: s.tabUserId, stream: localPreview() }, ...Object.values(s.peers).map((p) => ({ key: p.peerId, userId: p.userId, stream: p.stream }))]
     const presenter = s.sharing ? tiles[0] : tiles.find((t) => s.peers[t.key]?.sharing)
-    g.fillStyle = '#111114'
+    g.fillStyle = '#0c1412'
     g.fillRect(0, 0, 1280, 720)
     const layout = presenter ? [presenter] : tiles
     const cols = Math.ceil(Math.sqrt(layout.length))
@@ -551,7 +555,7 @@ function startRecorder(): boolean {
         g.arc(x + w / 2, y + h / 2, Math.min(w, h) / 6, 0, Math.PI * 2)
         g.fill()
         g.fillStyle = '#fff'
-        g.font = `bold ${Math.min(w, h) / 8}px Inter, sans-serif`
+        g.font = `bold ${Math.min(w, h) / 8}px Figtree, sans-serif`
         g.textAlign = 'center'
         g.textBaseline = 'middle'
         g.fillText(initials(user?.name ?? '?'), x + w / 2, y + h / 2)
@@ -559,7 +563,7 @@ function startRecorder(): boolean {
       g.fillStyle = 'rgba(0,0,0,.55)'
       g.fillRect(x + 8, y + h - 34, 180, 26)
       g.fillStyle = '#fff'
-      g.font = '14px Inter, sans-serif'
+      g.font = '14px Figtree, sans-serif'
       g.textAlign = 'left'
       g.fillText(userName(t.userId), x + 16, y + h - 21)
     })

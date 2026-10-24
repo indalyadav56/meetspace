@@ -8,6 +8,7 @@ import { InlineEdit } from '../components/ui'
 import { SPACE_COLORS, cn } from '../../lib/utils'
 import { useQueryState } from '../../lib/useQueryState'
 import SpaceOverview from './SpaceOverview'
+import DetailsBar from '../components/DetailsBar'
 
 export default function SpacePage() {
   const { spaceId = '' } = useParams()
@@ -44,6 +45,7 @@ export default function SpacePage() {
           </div>
         </div>
       </div>
+      <DetailsBar value={space} onChange={(p) => s.updateSpace(spaceId, p)} what="Space" className="px-4 pt-1.5" />
       <div className="border-app mt-2 flex items-center gap-1 border-b px-4">
         {(
           [

@@ -10,6 +10,7 @@ import (
 	"github.com/indalyadav56/meetspace/backend/internal/work/application"
 	"github.com/indalyadav56/meetspace/backend/internal/work/domain"
 	"github.com/indalyadav56/meetspace/backend/pkg/authctx"
+	"github.com/indalyadav56/meetspace/backend/pkg/optional"
 	"github.com/indalyadav56/meetspace/backend/pkg/response"
 )
 
@@ -55,10 +56,28 @@ type nameColorReq struct {
 	Color string `json:"color"`
 }
 
+type detailsReq struct {
+	Description *string                `json:"description"`
+	OwnerID     optional.Field[string] `json:"ownerId"`
+	Priority    optional.Field[string] `json:"priority"`
+	StartDate   optional.Field[string] `json:"startDate"`
+	DueDate     optional.Field[string] `json:"dueDate"`
+}
+
+func (d detailsReq) patch() application.DetailsPatch {
+	return application.DetailsPatch{Description: d.Description, OwnerID: d.OwnerID, Priority: d.Priority, StartDate: d.StartDate, DueDate: d.DueDate}
+}
+
 type projectPatchReq struct {
 	Name     *string          `json:"name"`
 	Color    *string          `json:"color"`
 	Statuses *[]domain.Status `json:"statuses"`
+	detailsReq
+}
+
+type listPatchReq struct {
+	Name *string `json:"name"`
+	detailsReq
 }
 
 type folderReq struct {
@@ -94,7 +113,7 @@ func (h *Handler) createProject(c *gin.Context) {
 
 func (h *Handler) updateProject(c *gin.Context) {
 	if r, ok := bind[projectPatchReq](c); ok {
-		p, err := h.svc.UpdateProject(c.Request.Context(), ws(c), c.Param("id"), application.ProjectPatch{Name: r.Name, Color: r.Color, Statuses: r.Statuses})
+		p, err := h.svc.UpdateProject(c.Request.Context(), ws(c), c.Param("id"), application.ProjectPatch{Name: r.Name, Color: r.Color, Statuses: r.Statuses, Details: r.patch()})
 		respond(c, http.StatusOK, p, err)
 	}
 }
@@ -129,8 +148,8 @@ func (h *Handler) createList(c *gin.Context) {
 }
 
 func (h *Handler) renameList(c *gin.Context) {
-	if r, ok := bind[renameReq](c); ok {
-		l, err := h.svc.RenameList(c.Request.Context(), ws(c), c.Param("id"), r.Name)
+	if r, ok := bind[listPatchReq](c); ok {
+		l, err := h.svc.UpdateList(c.Request.Context(), ws(c), c.Param("id"), r.Name, r.patch())
 		respond(c, http.StatusOK, l, err)
 	}
 }
@@ -192,7 +211,21 @@ func (h *Handler) updateTask(c *gin.Context) {
 }
 
 func (h *Handler) deleteTask(c *gin.Context) {
-	respond(c, 0, nil, h.svc.DeleteTask(c.Request.Context(), ws(c), c.Param("id")))
+	respond(c, 0, nil, h.svc.DeleteTask(c.Request.Context(), ws(c), actor(c), c.Param("id")))
+}
+
+func (h *Handler) listTrash(c *gin.Context) {
+	items, err := h.svc.ListTrash(c.Request.Context(), ws(c))
+	respond(c, http.StatusOK, items, err)
+}
+
+func (h *Handler) restoreTask(c *gin.Context) {
+	tasks, err := h.svc.RestoreTask(c.Request.Context(), ws(c), actor(c), c.Param("id"))
+	respond(c, http.StatusOK, tasks, err)
+}
+
+func (h *Handler) purgeTask(c *gin.Context) {
+	respond(c, 0, nil, h.svc.PurgeTask(c.Request.Context(), ws(c), c.Param("id")))
 }
 
 func (h *Handler) duplicateTask(c *gin.Context) {
@@ -220,7 +253,7 @@ func (h *Handler) bulkUpdate(c *gin.Context) {
 
 func (h *Handler) bulkDelete(c *gin.Context) {
 	if r, ok := bind[idsReq](c); ok {
-		respond(c, 0, nil, h.svc.BulkDelete(c.Request.Context(), ws(c), r.IDs))
+		respond(c, 0, nil, h.svc.BulkDelete(c.Request.Context(), ws(c), actor(c), r.IDs))
 	}
 }
 
@@ -475,6 +508,9 @@ func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.GET("/tasks/:id", h.getTask)
 	rg.PATCH("/tasks/:id", h.updateTask)
 	rg.DELETE("/tasks/:id", h.deleteTask)
+	rg.GET("/trash/tasks", h.listTrash)
+	rg.POST("/tasks/:id/restore", h.restoreTask)
+	rg.DELETE("/tasks/:id/purge", h.purgeTask)
 	rg.POST("/tasks/:id/duplicate", h.duplicateTask)
 	rg.POST("/tasks/:id/move", h.moveTask)
 	rg.POST("/tasks/:id/dependencies", h.addDependency)

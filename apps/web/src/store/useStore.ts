@@ -25,6 +25,7 @@ import type {
   ViewKind,
   Whiteboard,
   Team,
+  Dashboard,
   Workspace,
   Meeting,
   CallLog,
@@ -66,7 +67,7 @@ export const BOT = 'bot'
 const DATA_KEYS = [
   'spaces', 'folders', 'lists', 'tasks', 'comments', 'activity', 'docs', 'notifications', 'fields', 'timeEntries',
   'channels', 'messages', 'whiteboards', 'goals', 'automations', 'meetings', 'callLogs', 'clips', 'forms', 'sprints', 'reminders',
-  'timesheets', 'teams',
+  'timesheets', 'teams', 'dashboards',
 ] as const
 type DataKey = (typeof DATA_KEYS)[number]
 
@@ -108,6 +109,7 @@ interface State {
   reminders: Reminder[]
   timesheets: Timesheet[]
   teams: Team[]
+  dashboards: Dashboard[]
   spaces: Space[]
   folders: Folder[]
   lists: List[]
@@ -204,6 +206,7 @@ interface State {
   deleteFolder: (id: ID) => void
   addList: (spaceId: ID, folderId: ID | null, name: string) => ID
   renameList: (id: ID, name: string) => void
+  updateList: (id: ID, patch: Partial<List>) => void
   deleteList: (id: ID) => void
   applyTemplate: (spaceId: ID, templateKey: string, name: string) => ID
 
@@ -245,6 +248,9 @@ interface State {
 
   addWhiteboard: () => ID
   addTeam: (input: Partial<Team> & { name: string }) => ID
+  addDashboard: (input?: Partial<Dashboard>) => ID
+  updateDashboard: (id: ID, patch: Partial<Dashboard>) => void
+  deleteDashboard: (id: ID) => void
   updateTeam: (id: ID, patch: Partial<Team>) => void
   deleteTeam: (id: ID) => void
   /** Title and manager for the org chart; resolves false (and toasts) when the server refuses. */
@@ -270,12 +276,14 @@ interface State {
 }
 
 const now = () => new Date().toISOString()
+/** Space/List detail fields sent on PATCH. */
+const DETAIL_KEYS = ['description', 'ownerId', 'priority', 'startDate', 'dueDate'] as const
 
 function emptyData(): Pick<State, DataKey | 'timer' | 'lastRead' | 'presence'> {
   return {
     spaces: [], folders: [], lists: [], tasks: [], comments: [], activity: [], docs: [], notifications: [], fields: [], timeEntries: [],
     channels: [], messages: [], whiteboards: [], goals: [], automations: [], meetings: [], callLogs: [], clips: [], forms: [], sprints: [],
-    reminders: [], timesheets: [], teams: [], timer: null, lastRead: {}, presence: [],
+    reminders: [], timesheets: [], teams: [], dashboards: [], timer: null, lastRead: {}, presence: [],
   }
 }
 
@@ -477,7 +485,7 @@ export const useStore = create<State>()(
             else {
               const isNew = !get().notifications.some((n) => n.id === p.id)
               set((s) => ({ notifications: [p, ...s.notifications.filter((n) => n.id !== p.id)] }))
-              if (isNew && p.kind === 'reminder' && 'Notification' in window && Notification.permission === 'granted')
+              if (isNew && p.kind === 'reminder' && !notificationsMuted() && 'Notification' in window && Notification.permission === 'granted')
                 new Notification('Meetspace reminder', { body: p.text })
             }
             return
@@ -873,7 +881,7 @@ export const useStore = create<State>()(
         },
         updateSpace: (id, patch) => {
           patchLocal('spaces', id, patch)
-          const body = pick(patch, ['name', 'color', 'statuses'])
+          const body = pick(patch, ['name', 'color', 'statuses', ...DETAIL_KEYS])
           const v = remember('spaces', id, body)
           patchSoon(`spaces:${id}`, body, (b) => save('spaces', api.patch<Space>(w(`/projects/${id}`), b), v, id))
         },
@@ -914,6 +922,12 @@ export const useStore = create<State>()(
         renameList: (id, name) => {
           patchLocal('lists', id, { name })
           save('lists', api.patch<List>(w(`/lists/${id}`), { name }))
+        },
+        updateList: (id, patch) => {
+          patchLocal('lists', id, patch)
+          const body = pick(patch, ['name', ...DETAIL_KEYS])
+          const v = remember('lists', id, body)
+          patchSoon(`lists:${id}`, body, (b) => save('lists', api.patch<List>(w(`/lists/${id}`), b), v, id))
         },
         deleteList: (id) => {
           dropLists([id])
@@ -1163,6 +1177,25 @@ export const useStore = create<State>()(
           void api.del(w(`/whiteboards/${id}`))
         },
 
+        addDashboard: (input = {}) => {
+          const id = newId()
+          const d: Dashboard = { id, spaceId: null, title: 'Untitled dashboard', cards: ['stats', 'status', 'workload', 'trend'], createdBy: me(), createdAt: now(), updatedAt: now(), ...input }
+          upsert('dashboards', d)
+          save('dashboards', api.post<Dashboard>(w('/dashboards'), { id, title: d.title, cards: d.cards, projectId: d.spaceId }))
+          return id
+        },
+        updateDashboard: (id, patch) => {
+          patchLocal('dashboards', id, { ...patch, updatedAt: now() })
+          const body: Record<string, unknown> = pick(patch, ['title', 'cards'])
+          if ('spaceId' in patch) body.projectId = patch.spaceId ?? ''
+          const v = remember('dashboards', id, pick(patch, ['title', 'cards', 'spaceId']))
+          patchSoon(`dashboards:${id}`, body, (b) => save('dashboards', api.patch<Dashboard>(w(`/dashboards/${id}`), b), v, id))
+        },
+        deleteDashboard: (id) => {
+          cancelPending(`dashboards:${id}`)
+          removeLocal('dashboards', id)
+          void api.del(w(`/dashboards/${id}`))
+        },
         addTeam: (input) => {
           const id = newId()
           const team: Team = { id, color: '#0b7f71', description: '', leadId: null, members: [], createdBy: me(), createdAt: now(), updatedAt: now(), ...input }
@@ -1283,6 +1316,16 @@ onWriteError((e: ApiError) => {
 session.subscribe((signedIn) => {
   if (!signedIn && useStore.getState().signedIn) useStore.getState().logout()
 })
+
+/** Mirrors app/personal's mute so the store needn't import UI modules. */
+const notificationsMuted = () => {
+  try {
+    const until = JSON.parse(localStorage.getItem('ms.notif.mutedUntil') ?? 'null') as string | null
+    return !!until && until > new Date().toISOString()
+  } catch {
+    return false
+  }
+}
 
 export const useMe = () => useStore((s) => s.users.find((u) => u.id === s.currentUserId) ?? { id: s.currentUserId ?? '', name: 'You', email: '', color: '#64748b' })
 

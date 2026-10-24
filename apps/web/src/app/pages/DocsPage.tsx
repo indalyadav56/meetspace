@@ -20,6 +20,7 @@ import {
   Sparkles,
   Star,
   Trash2,
+  X,
 } from 'lucide-react'
 import { useAssistant } from '../ai/useAssistant'
 import { format, parseISO } from 'date-fns'
@@ -55,6 +56,24 @@ const pref = {
   },
 }
 
+/** When this browser last opened each doc (for the "Date viewed" column). */
+const viewed = {
+  all: (): Record<string, string> => {
+    try {
+      return JSON.parse(localStorage.getItem('ms.docs.viewed') ?? '{}')
+    } catch {
+      return {}
+    }
+  },
+  mark: (id: string) => {
+    try {
+      localStorage.setItem('ms.docs.viewed', JSON.stringify({ ...viewed.all(), [id]: new Date().toISOString() }))
+    } catch {
+      /* storage blocked */
+    }
+  },
+}
+
 const plain = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 
 export default function DocsPage() {
@@ -82,13 +101,20 @@ function DocsIndex() {
   const [view, setViewState] = useState<'grid' | 'list'>(() => (pref.get('view') === 'list' ? 'list' : 'grid'))
   const setView = (v: 'grid' | 'list') => (setViewState(v), pref.set('view', v))
 
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const seen = useMemo(() => viewed.all(), [])
+  // Docs saved from calls or meetings count as meeting notes.
+  const meetingNotes = useMemo(() => new Set([...s.callLogs.map((c) => c.notesDocId), ...s.meetings.map((m) => m.notesDocId)].filter((x): x is string => !!x)), [s.callLogs, s.meetings])
   const docs = useMemo(() => {
     const needle = q.toLowerCase()
     return s.docs
-      .filter((d) => (filter === 'all' ? true : filter === 'favorites' ? s.favorites.includes(d.id) : filter === 'mine' ? d.createdBy === s.currentUserId : (d.spaceId ?? 'ws') === filter))
+      .filter((d) =>
+        filter === 'all' ? true : filter === 'favorites' ? s.favorites.includes(d.id) : filter === 'mine' ? d.createdBy === s.currentUserId : filter === 'meetings' ? meetingNotes.has(d.id) || d.title.startsWith('Notes —') : (d.spaceId ?? 'ws') === filter,
+      )
       .filter((d) => !needle || (d.title || 'Untitled').toLowerCase().includes(needle) || plain(d.content).toLowerCase().includes(needle))
       .sort((a, b) => (sort === 'title' ? (a.title || 'Untitled').localeCompare(b.title || 'Untitled') : b.updatedAt.localeCompare(a.updatedAt)))
-  }, [s.docs, s.favorites, s.currentUserId, q, filter, sort])
+  }, [s.docs, s.favorites, s.currentUserId, q, filter, sort, meetingNotes])
+  const togglePick = (id: string) => setPicked((cur) => (cur.has(id) ? new Set([...cur].filter((x) => x !== id)) : new Set([...cur, id])))
 
   const where = (d: Doc) => (d.spaceId ? s.spaces.find((sp) => sp.id === d.spaceId)?.name : 'Workspace')
 
@@ -130,6 +156,7 @@ function DocsIndex() {
             <option value="all">All docs</option>
             <option value="favorites">Favorites</option>
             <option value="mine">Created by me</option>
+            <option value="meetings">Meeting notes</option>
             <option value="ws">Workspace</option>
             {s.spaces.map((sp) => (
               <option key={sp.id} value={sp.id}>
@@ -172,17 +199,70 @@ function DocsIndex() {
             ))}
           </div>
         ) : (
-          <div className="border-app overflow-hidden rounded-xl border">
-            {docs.map((d) => (
-              <Link key={d.id} to={`/app/docs/${d.id}`} className="border-app hover-surface flex items-center gap-3 border-b px-3 py-2 text-sm last:border-b-0">
-                <span className="w-6 text-center text-lg">{d.emoji}</span>
-                <span className="min-w-0 flex-1 truncate font-medium">{d.title || 'Untitled'}</span>
-                {s.favorites.includes(d.id) && <Star size={12} className="fill-amber-400 text-amber-400" />}
-                <span className="text-faint hidden w-32 truncate text-xs sm:block">{where(d)}</span>
-                <Avatar userId={d.createdBy} size={18} />
-                <span className="text-faint w-24 text-right text-xs">{timeAgo(d.updatedAt)}</span>
-              </Link>
-            ))}
+          <div className="border-app overflow-x-auto rounded-xl border">
+            <div className="min-w-[720px]">
+              <div className="text-faint border-app grid grid-cols-[28px_minmax(0,1fr)_130px_110px_90px_90px_28px] items-center gap-2 border-b px-3 py-2 text-xs font-medium">
+                <input type="checkbox" checked={docs.length > 0 && docs.every((d) => picked.has(d.id))} onChange={(e) => setPicked(e.target.checked ? new Set(docs.map((d) => d.id)) : new Set())} className="accent-brand-600 h-3.5 w-3.5" aria-label="Select all docs" />
+                <span>Name</span>
+                <span>Location</span>
+                <span>Created by</span>
+                <span>Updated</span>
+                <span>Viewed</span>
+                <span />
+              </div>
+              {docs.map((d) => (
+                <div key={d.id} className={cn('border-app hover-surface group grid grid-cols-[28px_minmax(0,1fr)_130px_110px_90px_90px_28px] items-center gap-2 border-b px-3 py-2 text-sm last:border-b-0', picked.has(d.id) && 'bg-brand-50/60 dark:bg-brand-500/10')}>
+                  <input type="checkbox" checked={picked.has(d.id)} onChange={() => togglePick(d.id)} className={cn('accent-brand-600 h-3.5 w-3.5', !picked.size && 'opacity-0 group-hover:opacity-100')} aria-label={`Select ${d.title || 'Untitled'}`} />
+                  <Link to={`/app/docs/${d.id}`} className="flex min-w-0 items-center gap-2">
+                    <span className="w-6 text-center text-lg">{d.emoji}</span>
+                    <span className="truncate font-medium hover:underline">{d.title || 'Untitled'}</span>
+                    {meetingNotes.has(d.id) && <span className="surface-muted text-muted shrink-0 rounded px-1.5 text-[10px]">Meeting notes</span>}
+                  </Link>
+                  <span className="text-muted truncate text-xs">{where(d)}</span>
+                  <span className="text-muted flex min-w-0 items-center gap-1.5 truncate text-xs">
+                    <Avatar userId={d.createdBy} size={18} /> {s.users.find((u) => u.id === d.createdBy)?.name.split(' ')[0]}
+                  </span>
+                  <span className="text-muted text-xs">{timeAgo(d.updatedAt)}</span>
+                  <span className="text-muted text-xs">{seen[d.id] ? timeAgo(seen[d.id]) : '—'}</span>
+                  <button onClick={() => s.toggleFavorite(d.id)} aria-label="Toggle favorite" title="Favorite">
+                    <Star size={13} className={s.favorites.includes(d.id) ? 'fill-amber-400 text-amber-400' : 'text-faint opacity-0 group-hover:opacity-100'} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {picked.size > 0 && (
+          <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-stone-900 px-2 py-1.5 text-[13px] text-white shadow-2xl">
+            <span className="px-2 font-semibold">{picked.size} selected</span>
+            <span className="mx-1 h-5 border-l border-white/20" />
+            <button
+              onClick={() => {
+                picked.forEach((id) => {
+                  const d = s.docs.find((x) => x.id === id)
+                  if (!d) return
+                  const copy = s.addDoc(d.spaceId)
+                  s.updateDoc(copy, { title: `${d.title || 'Untitled'} (copy)`, emoji: d.emoji, content: d.content })
+                })
+                setPicked(new Set())
+              }}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium hover:bg-white/10"
+            >
+              <Copy size={14} /> Duplicate
+            </button>
+            <button
+              onClick={() => {
+                if (!confirm(`Delete ${picked.size} doc${picked.size > 1 ? 's' : ''}?`)) return
+                picked.forEach((id) => s.deleteDoc(id))
+                setPicked(new Set())
+              }}
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-medium text-red-300 hover:bg-white/10"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+            <button onClick={() => setPicked(new Set())} className="ml-1 rounded-md p-1.5 hover:bg-white/10" aria-label="Clear selection">
+              <X size={15} />
+            </button>
           </div>
         )}
         {docs.length === 0 && <p className="text-muted py-16 text-center text-sm">No docs found.</p>}
@@ -236,6 +316,7 @@ function DocEditor({ doc }: { doc: Doc }) {
   const fav = s.favorites.includes(doc.id)
 
   useEffect(() => {
+    viewed.mark(doc.id)
     s.touchRecent(doc.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id])

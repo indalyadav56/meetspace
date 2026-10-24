@@ -26,9 +26,17 @@ func (d userDirectory) ProfilesMap(ctx context.Context, ids []string) ([]map[str
 	}
 	out := make([]map[string]any, len(ps))
 	for i, p := range ps {
-		out[i] = map[string]any{"id": p.ID, "name": p.Name, "email": p.Email, "color": p.Color}
+		out[i] = profileMap(p)
 	}
 	return out, nil
+}
+
+func profileMap(p identityapp.Profile) map[string]any {
+	m := map[string]any{"id": p.ID, "name": p.Name, "email": p.Email, "color": p.Color}
+	if p.Status != nil {
+		m["status"] = p.Status
+	}
+	return m
 }
 
 func (d userDirectory) DisplayName(ctx context.Context, id string) string {

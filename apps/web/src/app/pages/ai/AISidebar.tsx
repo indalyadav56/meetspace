@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bot, Cable, MessageSquarePlus, Sparkles } from 'lucide-react'
+import { Bot, Cable, MessageSquarePlus, Sparkles, Wand2 } from 'lucide-react'
 import { useStore } from '../../../store/useStore'
 import { useAssistant } from '../../ai/useAssistant'
 import { useAgents } from './agentsStore'
@@ -9,6 +9,8 @@ import { Group, Row, SidebarShell } from '../../SectionSidebar'
 export function AISidebar() {
   const ws = useStore((s) => s.currentWorkspaceId)
   const { list, workspaceId, load } = useAgents()
+  const agents = list.filter((a) => a.kind !== 'skill')
+  const skills = list.filter((a) => a.kind === 'skill' && a.enabled !== false)
   const persona = useAssistant((s) => s.persona)
   const server = useAssistant((s) => s.agent)
   const nav = useNavigate()
@@ -34,12 +36,13 @@ export function AISidebar() {
     >
       <Group>
         <Row to="/app/ai" icon={Sparkles} label="Ask" keys={['view']} />
-        <Row to="/app/ai?view=agents" icon={Bot} label="Agents" count={list.length} keys={['view']} />
+        <Row to="/app/ai?view=agents" icon={Bot} label="Agents" count={agents.length} keys={['view']} />
+        <Row to="/app/ai?view=skills" icon={Wand2} label="Skills" count={skills.length} keys={['view']} />
         <Row to="/app/apps" icon={Cable} label="Connections" />
       </Group>
-      {list.length > 0 && (
+      {agents.length > 0 && (
         <Group label="Your agents">
-          {list.map((a) => (
+          {agents.map((a) => (
             <Row
               key={a.id}
               iconNode={<span className="w-[15px] text-center text-xs">{a.icon}</span>}

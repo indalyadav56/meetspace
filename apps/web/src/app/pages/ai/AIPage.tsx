@@ -7,16 +7,18 @@ import { Message } from '../../ai/AssistantPanel'
 import { Modal } from '../../components/ui'
 import { useQueryState } from '../../../lib/useQueryState'
 import { AGENT_TEMPLATES, errorText, useAgents } from './agentsStore'
+import SkillsView from './SkillsView'
 import { cn } from '../../../lib/utils'
 
 /** Full-page assistant: ask anything, or run a saved agent. */
 export default function AIPage() {
-  const [view, setView] = useQueryState<'ask' | 'agents'>('view', 'ask')
+  const [view, setView] = useQueryState<'ask' | 'agents' | 'skills'>('view', 'ask')
   const ws = useStore((s) => s.currentWorkspaceId)
   const { workspaceId, load } = useAgents()
   useEffect(() => {
     if (ws && workspaceId !== ws) void load(ws)
   }, [ws, workspaceId, load])
+  if (view === 'skills') return <SkillsView onChat={() => setView('ask')} />
   return view === 'agents' ? <AgentsView onChat={() => setView('ask')} /> : <AskView onAgents={() => setView('agents')} />
 }
 
@@ -136,7 +138,8 @@ function AskView({ onAgents }: { onAgents: () => void }) {
 }
 
 function AgentsView({ onChat }: { onChat: () => void }) {
-  const { list, remove } = useAgents()
+  const { list: all, remove } = useAgents()
+  const list = all.filter((a) => a.kind !== 'skill')
   const persona = useAssistant((s) => s.persona)
   const [editing, setEditing] = useState<(Omit<SavedAgent, 'id'> & { id?: string }) | null>(null)
   const [error, setError] = useState<string | null>(null)

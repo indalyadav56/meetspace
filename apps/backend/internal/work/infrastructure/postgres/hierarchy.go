@@ -54,13 +54,16 @@ func execOne(ctx context.Context, db *sql.DB, target error, q string, args ...an
 
 func scanProject(r row) (*domain.Project, error) {
 	var p domain.Project
-	if err := r.Scan(&p.ID, &p.WorkspaceID, &p.Name, &p.Color, pgjson.Scan(&p.Statuses), &p.CreatedAt); err != nil {
+	if err := r.Scan(&p.ID, &p.WorkspaceID, &p.Name, &p.Color, pgjson.Scan(&p.Statuses), &p.CreatedAt, &p.Description, &p.OwnerID, &p.Priority, &p.StartDate, &p.DueDate); err != nil {
 		return nil, notFound(err, domain.ErrProjectNotFound)
 	}
 	return &p, nil
 }
 
-const projectCols = `id, workspace_id, name, color, statuses, created_at`
+// detailCols reads the shared Space/List details; dates come back as YYYY-MM-DD text.
+const detailCols = `description, owner_id::text, priority, to_char(start_date, 'YYYY-MM-DD'), to_char(due_date, 'YYYY-MM-DD')`
+
+const projectCols = `id, workspace_id, name, color, statuses, created_at, ` + detailCols
 
 func (r *Repository) CreateProject(ctx context.Context, p *domain.Project) error {
 	return r.db.QueryRowContext(ctx, `INSERT INTO work.projects (id, workspace_id, name, color, statuses) VALUES (COALESCE(NULLIF($5, '')::uuid, uuidv7()), $1,$2,$3,$4) RETURNING id, created_at`,
@@ -89,8 +92,9 @@ func (r *Repository) ListProjects(ctx context.Context, ws string) ([]domain.Proj
 }
 
 func (r *Repository) UpdateProject(ctx context.Context, p *domain.Project) error {
-	return execOne(ctx, r.db, domain.ErrProjectNotFound, `UPDATE work.projects SET name=$3, color=$4, statuses=$5 WHERE workspace_id=$1 AND id=$2`,
-		p.WorkspaceID, p.ID, p.Name, p.Color, pgjson.Value(p.Statuses))
+	return execOne(ctx, r.db, domain.ErrProjectNotFound, `UPDATE work.projects SET name=$3, color=$4, statuses=$5,
+		description=$6, owner_id=$7::uuid, priority=$8, start_date=$9::date, due_date=$10::date WHERE workspace_id=$1 AND id=$2`,
+		p.WorkspaceID, p.ID, p.Name, p.Color, pgjson.Value(p.Statuses), p.Description, p.OwnerID, p.Priority, p.StartDate, p.DueDate)
 }
 
 func (r *Repository) DeleteProject(ctx context.Context, ws, id string) error {
@@ -143,10 +147,12 @@ func (r *Repository) CreateList(ctx context.Context, l *domain.List) error {
 	return r.db.QueryRowContext(ctx, `INSERT INTO work.lists (id, workspace_id, project_id, folder_id, name) VALUES (COALESCE(NULLIF($5, '')::uuid, uuidv7()), $1,$2,$3,$4) RETURNING id`, l.WorkspaceID, l.ProjectID, l.FolderID, l.Name, l.ID).Scan(&l.ID)
 }
 
+const listCols = `id, workspace_id, project_id, folder_id::text, name, ` + detailCols
+
 func scanList(r row) (*domain.List, error) {
 	var l domain.List
 	var folder sql.NullString
-	if err := r.Scan(&l.ID, &l.WorkspaceID, &l.ProjectID, &folder, &l.Name); err != nil {
+	if err := r.Scan(&l.ID, &l.WorkspaceID, &l.ProjectID, &folder, &l.Name, &l.Description, &l.OwnerID, &l.Priority, &l.StartDate, &l.DueDate); err != nil {
 		return nil, notFound(err, domain.ErrListNotFound)
 	}
 	l.FolderID = ptr(folder)
@@ -154,11 +160,11 @@ func scanList(r row) (*domain.List, error) {
 }
 
 func (r *Repository) GetList(ctx context.Context, ws, id string) (*domain.List, error) {
-	return scanList(r.db.QueryRowContext(ctx, `SELECT id, workspace_id, project_id, folder_id::text, name FROM work.lists WHERE workspace_id=$1 AND id=$2`, ws, id))
+	return scanList(r.db.QueryRowContext(ctx, `SELECT `+listCols+` FROM work.lists WHERE workspace_id=$1 AND id=$2`, ws, id))
 }
 
 func (r *Repository) ListLists(ctx context.Context, ws string) ([]domain.List, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT id, workspace_id, project_id, folder_id::text, name FROM work.lists WHERE workspace_id=$1 ORDER BY created_at`, ws)
+	rows, err := r.db.QueryContext(ctx, `SELECT `+listCols+` FROM work.lists WHERE workspace_id=$1 ORDER BY created_at`, ws)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +181,9 @@ func (r *Repository) ListLists(ctx context.Context, ws string) ([]domain.List, e
 }
 
 func (r *Repository) UpdateList(ctx context.Context, l *domain.List) error {
-	return execOne(ctx, r.db, domain.ErrListNotFound, `UPDATE work.lists SET name=$3, folder_id=$4 WHERE workspace_id=$1 AND id=$2`, l.WorkspaceID, l.ID, l.Name, l.FolderID)
+	return execOne(ctx, r.db, domain.ErrListNotFound, `UPDATE work.lists SET name=$3, folder_id=$4,
+		description=$5, owner_id=$6::uuid, priority=$7, start_date=$8::date, due_date=$9::date WHERE workspace_id=$1 AND id=$2`,
+		l.WorkspaceID, l.ID, l.Name, l.FolderID, l.Description, l.OwnerID, l.Priority, l.StartDate, l.DueDate)
 }
 
 func (r *Repository) DeleteList(ctx context.Context, ws, id string) error {

@@ -41,11 +41,53 @@ type Repository interface {
 	GetDoc(ctx context.Context, ws, id string) (*Doc, error)
 	ListDocs(ctx context.Context, ws string) ([]Doc, error)
 	UpdateDoc(ctx context.Context, d *Doc) error
-	DeleteDoc(ctx context.Context, ws, id string) error
+	DeleteDoc(ctx context.Context, ws, id, actorID string) error
 
 	CreateWhiteboard(ctx context.Context, w *Whiteboard) error
 	GetWhiteboard(ctx context.Context, ws, id string) (*Whiteboard, error)
 	ListWhiteboards(ctx context.Context, ws string) ([]Whiteboard, error)
 	UpdateWhiteboard(ctx context.Context, w *Whiteboard) error
-	DeleteWhiteboard(ctx context.Context, ws, id string) error
+	DeleteWhiteboard(ctx context.Context, ws, id, actorID string) error
+
+	ListTrash(ctx context.Context, ws string) ([]TrashedItem, error)
+	Restore(ctx context.Context, ws, kind, id string) error
+	Purge(ctx context.Context, ws, kind, id string) error
+
+	DashboardRepository
+}
+
+const (
+	TrashDoc        = "doc"
+	TrashWhiteboard = "whiteboard"
+)
+
+// TrashedItem is a deleted doc or whiteboard waiting in the trash.
+type TrashedItem struct {
+	Kind      string    `json:"kind"`
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Emoji     string    `json:"emoji"`
+	DeletedAt time.Time `json:"deletedAt"`
+	DeletedBy string    `json:"deletedBy"`
+}
+
+// Dashboard is a saved set of report cards, optionally scoped to one Space.
+type Dashboard struct {
+	ID          string    `json:"id"`
+	WorkspaceID string    `json:"-"`
+	ProjectID   *string   `json:"projectId"`
+	Title       string    `json:"title"`
+	Cards       []string  `json:"cards"`
+	CreatedBy   string    `json:"createdBy"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+var ErrDashboardNotFound = apperror.NotFound("dashboard_not_found", "dashboard not found")
+
+type DashboardRepository interface {
+	ListDashboards(ctx context.Context, ws string) ([]Dashboard, error)
+	GetDashboard(ctx context.Context, ws, id string) (*Dashboard, error)
+	SaveDashboard(ctx context.Context, d *Dashboard) error
+	DeleteDashboard(ctx context.Context, ws, id string) error
 }

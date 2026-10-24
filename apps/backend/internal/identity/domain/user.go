@@ -13,6 +13,9 @@ type User struct {
 	Email        string
 	FullName     string
 	Color        string
+	StatusEmoji  string
+	StatusText   string
+	StatusUntil  *time.Time
 	PasswordHash string
 	IsActive     bool
 	LastLoginAt  *time.Time
@@ -55,6 +58,7 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	ListByIDs(ctx context.Context, ids []string) ([]User, error)
 	UpdateProfile(ctx context.Context, id, fullName, color string) error
+	UpdateStatus(ctx context.Context, id, emoji, text string, until *time.Time) error
 	UpdatePassword(ctx context.Context, id, hash string) error
 	UpdateLastLogin(ctx context.Context, id string, at time.Time) error
 }

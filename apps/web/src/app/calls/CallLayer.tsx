@@ -84,7 +84,7 @@ export function VideoTile({
   }, [stream, muted, hasVideo])
 
   return (
-    <div className={cn('relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-xl bg-[#26272d] ring-2 transition-shadow', speaking ? 'ring-emerald-400' : 'ring-transparent')}>
+    <div className={cn('call-tile relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden rounded-xl ring-2 transition-shadow', speaking ? 'ring-brand-400' : 'ring-[var(--border)]')}>
       <video ref={ref} autoPlay playsInline muted className={cn('h-full w-full', contain ? 'object-contain' : 'object-cover', mirror && 'scale-x-[-1]', !hasVideo && 'hidden')} />
       {!muted && <audio ref={audioRef} autoPlay />}
       {!hasVideo && (
@@ -96,8 +96,8 @@ export function VideoTile({
             .slice(0, 2)}
         </span>
       )}
-      <span className="absolute bottom-2 left-2 flex max-w-[80%] items-center gap-1.5 rounded-md bg-black/55 px-2 py-1 text-xs font-medium text-white">
-        {!micOn && <MicOff size={12} className="text-red-400" />}
+      <span className="call-chip absolute bottom-2 left-2 flex max-w-[80%] items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium shadow-sm">
+        {!micOn && <MicOff size={12} className="text-accent-500" />}
         <span className="truncate">{label ?? user?.name ?? 'Guest'}</span>
       </span>
       {hand && (
@@ -117,7 +117,7 @@ function MicMeter() {
   return (
     <span className="flex h-4 items-end gap-0.5" aria-label={speaking ? 'Microphone picking up sound' : 'Microphone quiet'}>
       {[0, 1, 2, 3, 4].map((i) => (
-        <span key={i} className={cn('w-1 rounded-sm transition-all', micOn && speaking ? 'bg-emerald-400' : 'bg-white/25')} style={{ height: micOn && speaking ? `${40 + ((i * 37) % 60)}%` : '30%' }} />
+        <span key={i} className={cn('w-1 rounded-sm transition-all', micOn && speaking ? 'bg-brand-500' : 'bg-[var(--border)]')} style={{ height: micOn && speaking ? `${40 + ((i * 37) % 60)}%` : '30%' }} />
       ))}
     </span>
   )
@@ -131,15 +131,17 @@ function Lobby() {
   if (!c.call) return null
   const joiningExisting = !c.call.isNew
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
-      <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-[#18181d] text-white shadow-2xl">
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-3">
-          {c.call.kind === 'video' ? <Video size={18} /> : <Phone size={18} />}
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-3 backdrop-blur-sm">
+      <div className="surface text-app shadow-pop w-full max-w-3xl overflow-hidden rounded-2xl">
+        <div className="border-app flex items-center gap-3 border-b px-5 py-3">
+          <span className="bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300 flex h-8 w-8 items-center justify-center rounded-lg">
+          {c.call.kind === 'video' ? <Video size={17} /> : <Phone size={17} />}
+          </span>
           <div className="min-w-0">
             <div className="truncate font-semibold">{c.call.title}</div>
-            <div className="text-xs text-white/60">{joiningExisting ? 'Join the call' : `Start a ${c.call.kind} call`}</div>
+            <div className="text-muted text-xs">{joiningExisting ? 'Join the call' : `Start a ${c.call.kind} call`}</div>
           </div>
-          <button onClick={c.cancelLobby} className="ml-auto rounded-md p-1.5 hover:bg-white/10" aria-label="Cancel">
+          <button onClick={c.cancelLobby} className="hover-surface text-muted ml-auto rounded-md p-1.5" aria-label="Cancel">
             <X size={18} />
           </button>
         </div>
@@ -150,19 +152,19 @@ function Lobby() {
           <div className="flex flex-col gap-3 text-sm">
             <div className="flex items-center gap-2">
               <Avatar userId={c.tabUserId} size={22} />
-              <span className="text-xs text-white/60">Joining as {users.find((u) => u.id === c.tabUserId)?.name}</span>
+              <span className="text-muted text-xs">Joining as {users.find((u) => u.id === c.tabUserId)?.name}</span>
             </div>
-            {c.error && <p className="rounded-lg bg-red-500/15 px-3 py-2 text-xs text-red-200">{c.error}</p>}
+            {c.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/15 dark:text-red-200">{c.error}</p>}
             <label className="block">
-              <span className="flex items-center justify-between text-xs text-white/60">
+              <span className="text-muted flex items-center justify-between text-xs">
                 Microphone <MicMeter />
               </span>
-              <select value={c.devices.mic} onChange={(e) => void c.selectDevice('mic', e.target.value)} className="mt-1 w-full rounded-lg border border-white/15 bg-white/5 px-2 py-1.5">
-                <option value="" className="text-black">
+              <select value={c.devices.mic} onChange={(e) => void c.selectDevice('mic', e.target.value)} className="border-app surface-subtle mt-1 w-full rounded-lg border px-2 py-1.5">
+                <option value="" >
                   Default microphone
                 </option>
                 {c.devices.mics.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId} className="text-black">
+                  <option key={d.deviceId} value={d.deviceId} >
                     {d.label || 'Microphone'}
                   </option>
                 ))}
@@ -170,30 +172,30 @@ function Lobby() {
             </label>
             {c.call.kind === 'video' && (
               <label className="block">
-                <span className="text-xs text-white/60">Camera</span>
-                <select value={c.devices.cam} onChange={(e) => void c.selectDevice('cam', e.target.value)} className="mt-1 w-full rounded-lg border border-white/15 bg-white/5 px-2 py-1.5">
-                  <option value="" className="text-black">
+                <span className="text-muted text-xs">Camera</span>
+                <select value={c.devices.cam} onChange={(e) => void c.selectDevice('cam', e.target.value)} className="border-app surface-subtle mt-1 w-full rounded-lg border px-2 py-1.5">
+                  <option value="" >
                     Default camera
                   </option>
                   {c.devices.cams.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId} className="text-black">
+                    <option key={d.deviceId} value={d.deviceId} >
                       {d.label || 'Camera'}
                     </option>
                   ))}
                 </select>
               </label>
             )}
-            {c.synthetic && <p className="rounded-lg bg-amber-400/15 px-3 py-2 text-xs text-amber-200">No camera or microphone access — you’ll join with an avatar and silent audio. Check your browser’s site permissions to use real devices.</p>}
+            {c.synthetic && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">No camera or microphone access — you’ll join with an avatar and silent audio. Check your browser’s site permissions to use real devices.</p>}
             <div className="mt-auto flex items-center gap-2">
-              <button onClick={c.toggleMic} className={cn('rounded-full p-3', c.micOn ? 'bg-white/10 hover:bg-white/20' : 'bg-red-500')} aria-label={c.micOn ? 'Mute' : 'Unmute'}>
+              <button onClick={c.toggleMic} className={cn('rounded-full p-3', c.micOn ? 'surface-muted hover-surface' : 'bg-accent-50 text-accent-600 dark:bg-accent-500/15 dark:text-accent-300')} aria-label={c.micOn ? 'Mute' : 'Unmute'}>
                 {c.micOn ? <Mic size={18} /> : <MicOff size={18} />}
               </button>
               {c.call.kind === 'video' && (
-                <button onClick={() => void c.toggleCam()} className={cn('rounded-full p-3', c.camOn ? 'bg-white/10 hover:bg-white/20' : 'bg-red-500')} aria-label={c.camOn ? 'Turn camera off' : 'Turn camera on'}>
+                <button onClick={() => void c.toggleCam()} className={cn('rounded-full p-3', c.camOn ? 'surface-muted hover-surface' : 'bg-accent-50 text-accent-600 dark:bg-accent-500/15 dark:text-accent-300')} aria-label={c.camOn ? 'Turn camera off' : 'Turn camera on'}>
                   {c.camOn ? <Video size={18} /> : <VideoOff size={18} />}
                 </button>
               )}
-              <button onClick={() => void c.join()} disabled={!c.local || c.phase === 'connecting'} className="ml-auto rounded-full bg-emerald-500 px-6 py-3 font-semibold hover:bg-emerald-600 disabled:opacity-50">
+              <button onClick={() => void c.join()} disabled={!c.local || c.phase === 'connecting'} className="bg-brand-600 hover:bg-brand-700 ml-auto rounded-full px-6 py-3 font-semibold text-white disabled:opacity-50">
                 {c.phase === 'connecting' ? 'Connecting…' : joiningExisting ? 'Join now' : 'Start call'}
               </button>
             </div>
@@ -214,7 +216,16 @@ function ControlButton({ on, danger, onClick, label, children, active }: { on?: 
       title={label}
       aria-label={label}
       aria-pressed={active}
-      className={cn('flex flex-col items-center gap-1 rounded-xl px-2.5 py-1.5 text-[10px] font-medium sm:px-3', danger ? 'bg-red-500 hover:bg-red-600' : active ? 'bg-brand-500 hover:bg-brand-600' : on === false ? 'bg-red-500/90 hover:bg-red-500' : 'hover:bg-white/10')}
+      className={cn(
+        'flex min-w-14 flex-col items-center gap-1 rounded-xl px-2.5 py-1.5 text-[10px] font-medium transition-colors sm:px-3',
+        danger
+          ? 'bg-red-600 text-white hover:bg-red-700'
+          : active
+            ? 'bg-brand-600 hover:bg-brand-700 text-white'
+            : on === false
+              ? 'bg-accent-50 text-accent-600 hover:bg-accent-100 dark:bg-accent-500/15 dark:text-accent-300 dark:hover:bg-accent-500/25'
+              : 'text-muted hover:bg-[var(--bg-hover)] hover:text-[var(--text)]',
+      )}
     >
       {children}
       <span className="hidden sm:block">{label}</span>
@@ -256,7 +267,7 @@ function Stage() {
 
   if (c.minimized)
     return createPortal(
-      <div className="fixed right-4 bottom-4 z-[60] w-72 overflow-hidden rounded-xl bg-[#18181d] text-white shadow-2xl ring-1 ring-white/10">
+      <div className="call-ui shadow-pop fixed right-4 bottom-4 z-[60] w-72 overflow-hidden rounded-xl ring-1 ring-[var(--border)]">
         <div className="aspect-video">
           {(() => {
             const t = focus ?? tiles.find((x) => !x.local) ?? tiles[0]
@@ -271,16 +282,16 @@ function Stage() {
         </div>
         <div className="flex items-center gap-1 p-2">
           <span className="min-w-0 flex-1 truncate text-xs">
-            <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="bg-brand-500 mr-1 inline-block h-2 w-2 rounded-full" />
             {c.call.title} · {clockFrom(elapsed)}
           </span>
-          <button onClick={c.toggleMic} className={cn('rounded-md p-1.5', !c.micOn && 'bg-red-500')} aria-label="Toggle mic">
+          <button onClick={c.toggleMic} className={cn('hover-surface rounded-md p-1.5', !c.micOn && 'bg-accent-50 text-accent-600 dark:bg-accent-500/15 dark:text-accent-300')} aria-label="Toggle mic">
             {c.micOn ? <Mic size={14} /> : <MicOff size={14} />}
           </button>
-          <button onClick={() => c.set({ minimized: false })} className="rounded-md p-1.5 hover:bg-white/10" aria-label="Expand call">
+          <button onClick={() => c.set({ minimized: false })} className="hover-surface rounded-md p-1.5" aria-label="Expand call">
             <Maximize2 size={14} />
           </button>
-          <button onClick={c.leave} className="rounded-md bg-red-500 p-1.5" aria-label="Leave call">
+          <button onClick={c.leave} className="rounded-md bg-red-600 p-1.5 text-white hover:bg-red-700" aria-label="Leave call">
             <PhoneOff size={14} />
           </button>
         </div>
@@ -291,26 +302,26 @@ function Stage() {
   const cols = tiles.length <= 1 ? 1 : tiles.length <= 4 ? 2 : 3
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex flex-col bg-[#111114] text-white">
+    <div className="call-ui fixed inset-0 z-[60] flex flex-col">
       <header className="flex h-12 shrink-0 items-center gap-3 px-4">
-        <span className="h-2 w-2 rounded-full bg-emerald-400" />
-        <span className="truncate font-semibold">{c.call.title}</span>
-        <span className="text-sm text-white/60 tabular-nums">{clockFrom(elapsed)}</span>
+        <span className="bg-brand-500 h-2 w-2 animate-pulse rounded-full" />
+        <span className="font-display truncate font-semibold">{c.call.title}</span>
+        <span className="text-muted text-sm tabular-nums">{clockFrom(elapsed)}</span>
         {c.recording && (
-          <span className="flex items-center gap-1 rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-300">
+          <span className="flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/20 dark:text-red-300">
             <Circle size={8} fill="currentColor" className="animate-pulse" /> REC {clockFrom(Date.now() - c.recordStart)}
           </span>
         )}
         {raised.length > 0 && (
-          <span className="hidden items-center gap-1 rounded-full bg-amber-400/20 px-2 py-0.5 text-xs text-amber-200 sm:flex">
+          <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-800 sm:flex dark:bg-amber-400/20 dark:text-amber-200">
             <Hand size={12} /> {raised.map((r) => users.find((u) => u.id === r.userId)?.name.split(' ')[0]).join(', ')}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <button onClick={() => c.set({ layout: c.layout === 'grid' ? 'speaker' : 'grid' })} className="rounded-md p-1.5 hover:bg-white/10" title={c.layout === 'grid' ? 'Speaker view' : 'Grid view'}>
+          <button onClick={() => c.set({ layout: c.layout === 'grid' ? 'speaker' : 'grid' })} className="hover-surface text-muted rounded-md p-1.5" title={c.layout === 'grid' ? 'Speaker view' : 'Grid view'}>
             {c.layout === 'grid' ? <Maximize2 size={16} /> : <LayoutGrid size={16} />}
           </button>
-          <button onClick={() => c.set({ minimized: true })} className="rounded-md p-1.5 hover:bg-white/10" title="Minimise — keep working while you talk">
+          <button onClick={() => c.set({ minimized: true })} className="hover-surface text-muted rounded-md p-1.5" title="Minimise — keep working while you talk">
             <Minimize2 size={16} />
           </button>
         </div>
@@ -342,7 +353,7 @@ function Stage() {
           )}
           {peers.length === 0 && (
             <div className="pointer-events-none absolute inset-x-0 top-6 flex justify-center">
-              <span className="rounded-full bg-black/60 px-4 py-1.5 text-sm text-white/80">Waiting for others to join{channelName ? ` from #${channelName}` : ''}…</span>
+              <span className="call-chip shadow-pop rounded-full px-4 py-1.5 text-sm">Waiting for others to join{channelName ? ` from #${channelName}` : ''}…</span>
             </div>
           )}
           {/* floating reactions */}
@@ -356,7 +367,7 @@ function Stage() {
           {c.captionsOn && captionsShown.length > 0 && (
             <div className="pointer-events-none absolute inset-x-4 bottom-6 flex flex-col items-center gap-1">
               {captionsShown.map((cap) => (
-                <span key={cap.userId} className="max-w-3xl rounded-lg bg-black/75 px-3 py-1.5 text-center text-sm">
+                <span key={cap.userId} className="max-w-3xl rounded-lg bg-black/75 px-3 py-1.5 text-center text-sm text-white">
                   <b className="text-white/70">{users.find((u) => u.id === cap.userId)?.name.split(' ')[0]}:</b> {cap.text}
                 </span>
               ))}
@@ -365,10 +376,10 @@ function Stage() {
         </div>
 
         {c.panel && (
-          <aside className="fixed inset-0 z-10 flex flex-col bg-[#18181d] sm:static sm:w-80 sm:border-l sm:border-white/10">
-            <div className="flex h-11 items-center border-b border-white/10 px-3 text-sm font-semibold">
+          <aside className="call-panel fixed inset-0 z-10 flex flex-col sm:static sm:m-4 sm:ml-0 sm:w-80 sm:rounded-xl sm:border sm:border-[var(--border)]">
+            <div className="border-app flex h-11 items-center border-b px-3 text-sm font-semibold">
               {c.panel === 'people' ? `People (${tiles.length})` : 'Meeting chat'}
-              <button onClick={() => c.set({ panel: null })} className="ml-auto rounded p-1 hover:bg-white/10" aria-label="Close panel">
+              <button onClick={() => c.set({ panel: null })} className="hover-surface text-muted ml-auto rounded p-1" aria-label="Close panel">
                 <X size={16} />
               </button>
             </div>
@@ -377,10 +388,10 @@ function Stage() {
             ) : (
               <>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3 text-sm">
-                  {c.chat.length === 0 && <p className="text-white/50">Messages here are visible to everyone in the call and saved to the meeting notes.</p>}
+                  {c.chat.length === 0 && <p className="text-muted">Messages here are visible to everyone in the call and saved to the meeting notes.</p>}
                   {c.chat.map((m, i) => (
                     <div key={i}>
-                      <div className="text-xs text-white/50">
+                      <div className="text-faint text-xs">
                         {users.find((u) => u.id === m.userId)?.name} · {format(m.at, 'h:mm a')}
                       </div>
                       <div className="break-words">{m.text}</div>
@@ -389,14 +400,14 @@ function Stage() {
                   <div ref={chatEnd} />
                 </div>
                 <form
-                  className="border-t border-white/10 p-2"
+                  className="border-app border-t p-2"
                   onSubmit={(e) => {
                     e.preventDefault()
                     c.sendChat(chatText)
                     setChatText('')
                   }}
                 >
-                  <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Message everyone" className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm outline-none" />
+                  <input value={chatText} onChange={(e) => setChatText(e.target.value)} placeholder="Message everyone" className="surface-muted w-full rounded-lg px-3 py-2 text-sm outline-none" />
                 </form>
               </>
             )}
@@ -405,7 +416,7 @@ function Stage() {
       </div>
 
       {c.error && (
-        <div className="mx-auto mb-2 flex items-center gap-2 rounded-lg bg-amber-400/15 px-3 py-1.5 text-xs text-amber-200">
+        <div className="mx-auto mb-2 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:bg-amber-400/15 dark:text-amber-200">
           {c.error}
           <button onClick={() => c.set({ error: null })} aria-label="Dismiss">
             <X size={12} />
@@ -413,7 +424,7 @@ function Stage() {
         </div>
       )}
 
-      <footer className="flex shrink-0 items-center justify-center gap-0.5 overflow-x-auto px-2 pb-3 sm:gap-1">
+      <footer className="mx-auto mb-3 flex max-w-full shrink-0 items-center justify-center gap-0.5 overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 shadow-[var(--shadow-pop)] sm:gap-1">
         <ControlButton on={c.micOn} onClick={c.toggleMic} label={c.micOn ? 'Mute' : 'Unmute'}>
           {c.micOn ? <Mic size={19} /> : <MicOff size={19} />}
         </ControlButton>
@@ -442,7 +453,7 @@ function Stage() {
           <Captions size={19} />
         </ControlButton>
         <ControlButton active={c.recording} onClick={c.toggleRecording} label={c.recording ? 'Stop rec' : 'Record'}>
-          <Circle size={19} className={c.recording ? 'fill-red-400 text-red-400' : ''} />
+          <Circle size={19} className={c.recording ? 'fill-white text-white' : ''} />
         </ControlButton>
         <ControlButton active={c.panel === 'people'} onClick={() => c.set({ panel: c.panel === 'people' ? null : 'people' })} label="People">
           <Users size={19} />
@@ -450,7 +461,7 @@ function Stage() {
         <ControlButton active={c.panel === 'chat'} onClick={() => c.set({ panel: c.panel === 'chat' ? null : 'chat' })} label="Chat">
           <MessageSquare size={19} />
         </ControlButton>
-        <span className="mx-1 h-8 border-l border-white/15" />
+        <span className="mx-1 h-8 border-l border-[var(--border)]" />
         <ControlButton danger onClick={c.leave} label="Leave">
           <PhoneOff size={19} />
         </ControlButton>
@@ -485,21 +496,21 @@ function PeoplePanel() {
       <Avatar userId={userId} size={28} />
       <span className="min-w-0 flex-1 truncate">
         {users.find((u) => u.id === userId)?.name}
-        {you && <span className="text-white/50"> (you)</span>}
+        {you && <span className="text-faint"> (you)</span>}
       </span>
-      {hand && <Hand size={14} className="text-amber-300" />}
-      {camOn ? <Video size={14} className="text-white/60" /> : <VideoOff size={14} className="text-white/40" />}
-      {micOn ? <Mic size={14} className="text-white/60" /> : <MicOff size={14} className="text-red-400" />}
+      {hand && <Hand size={14} className="text-amber-500" />}
+      {camOn ? <Video size={14} className="text-muted" /> : <VideoOff size={14} className="text-faint" />}
+      {micOn ? <Mic size={14} className="text-muted" /> : <MicOff size={14} className="text-accent-500" />}
     </div>
   )
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="px-3 pt-3 pb-1 text-[11px] font-semibold text-white/50 uppercase">In this call</div>
+      <div className="text-faint px-3 pt-3 pb-1 text-[11px] font-semibold uppercase">In this call</div>
       {row(c.tabUserId, c.micOn, c.camOn, c.hand, true)}
       {Object.values(c.peers).map((p) => row(p.userId, p.micOn, p.camOn, p.hand))}
       {invitable.length > 0 && (
         <>
-          <div className="px-3 pt-4 pb-1 text-[11px] font-semibold text-white/50 uppercase">Invite</div>
+          <div className="text-faint px-3 pt-4 pb-1 text-[11px] font-semibold uppercase">Invite</div>
           {invitable.map((u) => (
             <div key={u.id} className="flex items-center gap-2 px-3 py-2 text-sm">
               <Avatar userId={u.id} size={28} />
@@ -510,7 +521,7 @@ function PeoplePanel() {
                   ringUser(u.id)
                   setRung((r) => ({ ...r, [u.id]: true }))
                 }}
-                className="rounded-md bg-white/10 px-2 py-1 text-xs hover:bg-white/20 disabled:opacity-50"
+                className="bg-brand-50 text-brand-700 hover:bg-brand-100 dark:bg-brand-500/15 dark:text-brand-300 rounded-md px-2 py-1 text-xs font-medium disabled:opacity-50"
               >
                 {rung[u.id] ? 'Ringing…' : 'Ring'}
               </button>
@@ -534,24 +545,24 @@ function Incoming() {
   const user = useStore((s) => s.users.find((u) => u.id === inc?.from))
   if (!inc) return null
   return createPortal(
-    <div className="fixed top-4 right-4 z-[80] w-80 rounded-2xl bg-[#18181d] p-4 text-white shadow-2xl ring-1 ring-white/10" role="alertdialog" aria-label="Incoming call">
+    <div className="surface text-app shadow-pop fixed top-4 right-4 z-[80] w-80 rounded-2xl p-4" role="alertdialog" aria-label="Incoming call">
       <div className="flex items-center gap-3">
         <span className="relative">
           <Avatar userId={inc.from} size={44} />
-          <span className="absolute inset-0 animate-ping rounded-full ring-2 ring-emerald-400" />
+          <span className="ring-brand-400 absolute inset-0 animate-ping rounded-full ring-2" />
         </span>
         <div className="min-w-0">
           <div className="truncate font-semibold">{user?.name ?? 'Someone'}</div>
-          <div className="truncate text-sm text-white/60">
+          <div className="text-muted truncate text-sm">
             Incoming {inc.kind} call · {inc.title}
           </div>
         </div>
       </div>
       <div className="mt-4 flex gap-2">
-        <button onClick={declineIncoming} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 py-2 text-sm font-semibold hover:bg-red-600">
+        <button onClick={declineIncoming} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700">
           <PhoneOff size={16} /> Decline
         </button>
-        <button onClick={acceptIncoming} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2 text-sm font-semibold hover:bg-emerald-600">
+        <button onClick={acceptIncoming} className="bg-brand-600 hover:bg-brand-700 flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold text-white">
           {inc.kind === 'video' ? <Video size={16} /> : <Phone size={16} />} Accept
         </button>
       </div>
@@ -627,7 +638,7 @@ export function CallPill() {
   useTick(c.phase === 'in-call')
   if (c.phase !== 'in-call' || !c.minimized) return null
   return (
-    <button onClick={() => c.set({ minimized: false })} className="flex h-8 shrink-0 items-center gap-2 rounded-lg bg-emerald-500 px-2.5 text-sm font-medium text-white">
+    <button onClick={() => c.set({ minimized: false })} className="bg-brand-600 hover:bg-brand-700 flex h-8 shrink-0 items-center gap-2 rounded-lg px-2.5 text-sm font-medium text-white">
       <Phone size={14} /> <span className="font-mono tabular-nums">{clockFrom(Date.now() - c.startedAt)}</span>
       <ChevronDown size={14} />
     </button>

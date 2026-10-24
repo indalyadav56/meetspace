@@ -1,12 +1,13 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { AlarmClock, CheckSquare, FilePlus2, Film, Mic, PenTool, Play, Timer, Video } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
+import { AlarmClock, Briefcase, CheckSquare, FilePlus2, Film, LayoutDashboard, Mic, NotebookPen, NotepadText, PenTool, Play, Timer, Users, Video, type LucideIcon } from 'lucide-react'
 import { addHours, format, setMinutes } from 'date-fns'
-import { Popover, usePopover } from './components/ui'
+import { Popover } from './components/ui'
 import { useMe, useStore } from '../store/useStore'
 import { useCall } from './calls/useCall'
 import { useRecorder } from './clips/Recorder'
 import { cn } from '../lib/utils'
+import { usePersonal, type PopupTool, type ToolId } from './personal'
 
 /*
  * One-click capture from anywhere: a compact group of icons in the top bar.
@@ -15,54 +16,70 @@ import { cn } from '../lib/utils'
 
 const input = 'border-app surface w-full rounded-md border px-2.5 py-1.5 text-sm outline-none focus:border-brand-500'
 
-export default function QuickActions() {
-  const s = useStore()
-  const me = useMe()
+export interface Tool {
+  id: ToolId
+  label: string
+  icon: LucideIcon
+  /** popup tools open a small form anchored to whatever was clicked */
+  popup?: PopupTool
+  run?: (nav: NavigateFunction) => void
+}
+
+const startCall = () => {
+  const me = useStore.getState().users.find((u) => u.id === useStore.getState().currentUserId)
+  void useCall.getState().prepare({ title: `${me?.name.split(' ')[0] ?? 'My'}’s meeting`, kind: 'video', channelId: null, meetingId: null, invitees: [] })
+}
+
+/** Everything the account menu lists under Personal tools; pinned ones also sit in the top bar. */
+export const TOOLS: Tool[] = [
+  { id: 'task', label: 'Create task', icon: CheckSquare, popup: 'task' },
+  { id: 'myWork', label: 'My Work', icon: Briefcase, run: (nav) => nav('/app/everything?mine=1') },
+  { id: 'timer', label: 'Track time', icon: Timer, popup: 'timer' },
+  { id: 'notepad', label: 'Notepad', icon: NotebookPen, popup: 'notepad' },
+  { id: 'clip', label: 'Record a clip', icon: Film, run: () => useRecorder.getState().open({ mode: 'screen+camera' }) },
+  { id: 'voice', label: 'Record a voice note', icon: Mic, run: () => useRecorder.getState().open({ mode: 'audio' }) },
+  { id: 'reminder', label: 'Create reminder', icon: AlarmClock, popup: 'reminder' },
+  { id: 'doc', label: 'Create doc', icon: FilePlus2, run: (nav) => nav(`/app/docs/${useStore.getState().addDoc(null)}`) },
+  { id: 'whiteboard', label: 'Create whiteboard', icon: PenTool, run: (nav) => nav(`/app/whiteboards/${useStore.getState().addWhiteboard()}`) },
+  { id: 'people', label: 'View people', icon: Users, run: (nav) => nav('/app/teams') },
+  { id: 'dashboard', label: 'Create dashboard', icon: LayoutDashboard, run: (nav) => nav(`/app/dashboards/${useStore.getState().addDashboard()}`) },
+  { id: 'notetaker', label: 'Meetings & AI notes', icon: NotepadText, run: (nav) => nav('/app/meetings') },
+  { id: 'call', label: 'Start a video call', icon: Video, run: startCall },
+]
+
+export function useRunTool() {
   const nav = useNavigate()
+  const openPopup = usePersonal((s) => s.openPopup)
+  return (t: Tool, anchor: HTMLElement) => (t.popup ? openPopup(t.popup, anchor) : t.run?.(nav))
+}
+
+export default function QuickActions() {
+  const timerOn = useStore((s) => !!s.timer)
   const { pathname } = useLocation()
-  const task = usePopover()
-  const reminder = usePopover()
-  const timer = usePopover()
+  const pinned = usePersonal((s) => s.pinned)
+  const popup = usePersonal((s) => s.popup)
+  const close = usePersonal((s) => s.closePopup)
+  const run = useRunTool()
+  const shown = TOOLS.filter((t) => pinned.includes(t.id))
 
   return (
-    <div className="border-app surface hidden h-8 shrink-0 items-center rounded-lg border px-0.5 xl:flex" role="toolbar" aria-label="Quick actions">
-      <Action label="Quick task" onClick={task.toggle} active={task.open}>
-        <CheckSquare size={16} />
-      </Action>
-      <Action label="Set a reminder" onClick={reminder.toggle} active={reminder.open}>
-        <AlarmClock size={16} />
-      </Action>
-      <Action label={s.timer ? 'Timer is running' : 'Track time'} onClick={timer.toggle} active={timer.open || !!s.timer}>
-        <Timer size={16} />
-      </Action>
-      <Divider />
-      <Action label="New doc" onClick={() => nav(`/app/docs/${s.addDoc(null)}`)}>
-        <FilePlus2 size={16} />
-      </Action>
-      <Action label="New whiteboard" onClick={() => nav(`/app/whiteboards/${s.addWhiteboard()}`)}>
-        <PenTool size={16} />
-      </Action>
-      <Divider />
-      <Action label="Record a clip" onClick={() => useRecorder.getState().open({ mode: 'screen+camera' })}>
-        <Film size={16} />
-      </Action>
-      <Action label="Record a voice note" onClick={() => useRecorder.getState().open({ mode: 'audio' })}>
-        <Mic size={16} />
-      </Action>
-      <Action label="Start a video call" onClick={() => void useCall.getState().prepare({ title: `${me.name.split(' ')[0]}’s meeting`, kind: 'video', channelId: null, meetingId: null, invitees: [] })}>
-        <Video size={16} />
-      </Action>
-
-      <Popover open={task.open} anchor={task.anchor} onClose={task.close} align="end" width={300}>
-        <QuickTask listFromRoute={pathname.match(/\/app\/list\/([^/]+)/)?.[1]} onDone={task.close} />
+    <>
+      {shown.length > 0 && (
+        <div className="border-app surface hidden h-8 shrink-0 items-center rounded-lg border px-0.5 xl:flex" role="toolbar" aria-label="Quick actions">
+          {shown.map((t) => (
+            <Action key={t.id} label={t.id === 'timer' && timerOn ? 'Timer is running' : t.label} onClick={(e) => run(t, e.currentTarget)} active={(!!t.popup && popup?.tool === t.popup && popup.anchor.closest('[role=toolbar]') !== null) || (t.id === 'timer' && timerOn)}>
+              <t.icon size={16} />
+            </Action>
+          ))}
+        </div>
+      )}
+      <Popover open={!!popup} anchor={popup?.anchor ?? null} onClose={close} align="end" width={popup?.tool === 'notepad' ? 340 : 300}>
+        {popup?.tool === 'task' && <QuickTask listFromRoute={pathname.match(/\/app\/list\/([^/]+)/)?.[1]} onDone={close} />}
+        {popup?.tool === 'reminder' && <QuickReminder onDone={close} />}
+        {popup?.tool === 'timer' && <QuickTimer onDone={close} />}
+        {popup?.tool === 'notepad' && <Notepad onDone={close} />}
       </Popover>
-      <Popover open={reminder.open} anchor={reminder.anchor} onClose={reminder.close} align="end" width={300}>
-        <QuickReminder onDone={reminder.close} />
-      </Popover>
-      <Popover open={timer.open} anchor={timer.anchor} onClose={timer.close} align="end" width={300}>
-        <QuickTimer onDone={timer.close} />
-      </Popover>
-    </div>
+    </>
   )
 }
 
@@ -80,7 +97,53 @@ function Action({ label, onClick, active, children }: { label: string; onClick: 
   )
 }
 
-const Divider = () => <span className="bg-[var(--border)] mx-0.5 h-4 w-px" />
+/** A private scratchpad kept in this browser; any line can become a task. */
+function Notepad({ onDone }: { onDone: () => void }) {
+  const s = useStore()
+  const me = useMe()
+  const key = `ms.notepad.${me.id}`
+  const [text, setText] = useState(() => {
+    try {
+      return localStorage.getItem(key) ?? ''
+    } catch {
+      return ''
+    }
+  })
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(key, text)
+      } catch {
+        /* storage blocked */
+      }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [key, text])
+  const listId = s.lists[0]?.id
+  const toTask = () => {
+    const [first, ...rest] = text.trim().split('\n')
+    if (!first?.trim() || !listId) return
+    const id = s.addTask({ listId, title: first.trim().slice(0, 200), description: rest.join('\n').trim(), assignees: [me.id] })
+    s.toast(`Created “${first.trim().slice(0, 40)}”`)
+    setText('')
+    onDone()
+    s.openTask(id)
+  }
+  return (
+    <div className="space-y-2 p-2">
+      <div className="flex items-center text-sm font-semibold">
+        Notepad <span className="text-faint ml-auto text-[11px] font-normal">Only you see this</span>
+      </div>
+      <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} rows={9} placeholder="Jot something down… The first line becomes the task name." className={cn(input, 'resize-y font-[inherit]')} aria-label="Notepad" />
+      <div className="flex items-center justify-between">
+        <span className="text-faint text-[11px]">{text.trim() ? `${text.trim().split(/\s+/).length} words · saved` : 'Saved as you type'}</span>
+        <button onClick={toTask} disabled={!text.trim() || !listId} className="bg-brand-600 hover:bg-brand-700 rounded-md px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">
+          Turn into task
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function QuickTask({ listFromRoute, onDone }: { listFromRoute?: string; onDone: () => void }) {
   const s = useStore()

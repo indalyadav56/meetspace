@@ -9,6 +9,14 @@ export interface User {
   name: string
   email: string
   color: string
+  /** custom status teammates see; the server drops it once `until` passes */
+  status?: UserStatus
+}
+
+export interface UserStatus {
+  emoji: string
+  text: string
+  until?: string
 }
 
 export interface Status {
@@ -18,7 +26,16 @@ export interface Status {
   type: StatusType
 }
 
-export interface Space {
+/** What a Space or List is for, who owns it, how urgent it is and when it runs. */
+export interface Details {
+  description?: string
+  ownerId?: ID | null
+  priority?: Priority
+  startDate?: string | null
+  dueDate?: string | null
+}
+
+export interface Space extends Details {
   id: ID
   name: string
   color: string
@@ -31,7 +48,7 @@ export interface Folder {
   name: string
 }
 
-export interface List {
+export interface List extends Details {
   id: ID
   spaceId: ID
   folderId: ID | null
@@ -400,4 +417,17 @@ export interface Timesheet {
   submittedAt: string | null
   decidedBy: ID | null
   decidedAt: string | null
+}
+
+export type DashboardCard = 'stats' | 'status' | 'workload' | 'trend' | 'priority' | 'overdue' | 'dueSoon' | 'recentlyDone' | 'byList' | 'byTag'
+
+/** A saved dashboard: which report cards to show, optionally for one Space. */
+export interface Dashboard {
+  id: ID
+  spaceId: ID | null
+  title: string
+  cards: DashboardCard[]
+  createdBy: ID
+  createdAt: string
+  updatedAt: string
 }

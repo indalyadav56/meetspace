@@ -57,7 +57,7 @@ func (h *Handler) updateDoc(c *gin.Context) {
 }
 
 func (h *Handler) deleteDoc(c *gin.Context) {
-	if err := h.svc.DeleteDoc(c.Request.Context(), authctx.WorkspaceID(c), c.Param("id")); err != nil {
+	if err := h.svc.DeleteDoc(c.Request.Context(), authctx.WorkspaceID(c), authctx.UserID(c), c.Param("id")); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -90,7 +90,7 @@ func (h *Handler) updateWhiteboard(c *gin.Context) {
 }
 
 func (h *Handler) deleteWhiteboard(c *gin.Context) {
-	if err := h.svc.DeleteWhiteboard(c.Request.Context(), authctx.WorkspaceID(c), c.Param("id")); err != nil {
+	if err := h.svc.DeleteWhiteboard(c.Request.Context(), authctx.WorkspaceID(c), authctx.UserID(c), c.Param("id")); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -105,4 +105,68 @@ func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.POST("/whiteboards", h.createWhiteboard)
 	rg.PATCH("/whiteboards/:id", h.updateWhiteboard)
 	rg.DELETE("/whiteboards/:id", h.deleteWhiteboard)
+	rg.GET("/trash/docs", h.listTrash)
+	rg.POST("/dashboards", h.createDashboard)
+	rg.PATCH("/dashboards/:id", h.updateDashboard)
+	rg.DELETE("/dashboards/:id", h.deleteDashboard)
+	rg.POST("/trash/:kind/:id/restore", h.restore)
+	rg.DELETE("/trash/:kind/:id", h.purge)
+}
+
+func (h *Handler) listTrash(c *gin.Context) {
+	items, err := h.svc.ListTrash(c.Request.Context(), authctx.WorkspaceID(c))
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.Data(c, http.StatusOK, items)
+}
+
+func (h *Handler) restore(c *gin.Context) {
+	if err := h.svc.Restore(c.Request.Context(), authctx.WorkspaceID(c), c.Param("kind"), c.Param("id")); err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
+func (h *Handler) purge(c *gin.Context) {
+	if err := h.svc.Purge(c.Request.Context(), authctx.WorkspaceID(c), c.Param("kind"), c.Param("id")); err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.NoContent(c)
+}
+
+func (h *Handler) saveDashboard(c *gin.Context, create bool) {
+	var in application.DashboardInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.BadRequest(c, err)
+		return
+	}
+	id := in.ID
+	if !create {
+		id = c.Param("id")
+	}
+	d, err := h.svc.SaveDashboard(c.Request.Context(), authctx.WorkspaceID(c), authctx.UserID(c), id, in, create)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	status := http.StatusOK
+	if create {
+		status = http.StatusCreated
+	}
+	response.Data(c, status, d)
+}
+
+func (h *Handler) createDashboard(c *gin.Context) { h.saveDashboard(c, true) }
+func (h *Handler) updateDashboard(c *gin.Context) { h.saveDashboard(c, false) }
+
+func (h *Handler) deleteDashboard(c *gin.Context) {
+	if err := h.svc.DeleteDashboard(c.Request.Context(), authctx.WorkspaceID(c), c.Param("id")); err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.NoContent(c)
 }

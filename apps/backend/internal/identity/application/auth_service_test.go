@@ -41,6 +41,11 @@ func (m *memUsers) GetByEmail(_ context.Context, email string) (*domain.User, er
 func (m *memUsers) ListByIDs(context.Context, []string) ([]domain.User, error)  { return nil, nil }
 func (m *memUsers) UpdateProfile(context.Context, string, string, string) error { return nil }
 func (m *memUsers) UpdateLastLogin(context.Context, string, time.Time) error    { return nil }
+func (m *memUsers) UpdateStatus(_ context.Context, id, emoji, text string, until *time.Time) error {
+	u := m.byID[id]
+	u.StatusEmoji, u.StatusText, u.StatusUntil = emoji, text, until
+	return nil
+}
 func (m *memUsers) UpdatePassword(_ context.Context, id, hash string) error {
 	m.byID[id].PasswordHash = hash
 	return nil

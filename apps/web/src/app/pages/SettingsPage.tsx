@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQueryState } from '../../lib/useQueryState'
+import { TagManager, Trash } from './settings/TagsAndTrash'
 import { Bell, Download, FileUp, Settings, Trash2, UserPlus, Users } from 'lucide-react'
 import { useMe, useStore } from '../../store/useStore'
 import type { MemberRole, Priority, Task } from '../../store/types'
@@ -54,7 +55,7 @@ export default function SettingsPage() {
   const ws = s.workspaces.find((w) => w.id === s.currentWorkspaceId)!
   const myRole = ws.members.find((m) => m.userId === me.id)?.role ?? 'member'
   const canManage = myRole === 'owner' || myRole === 'admin'
-  const [tab, setTab] = useQueryState<'general' | 'members' | 'data' | 'notifications'>('tab', 'general')
+  const [tab, setTab] = useQueryState<'general' | 'members' | 'data' | 'notifications' | 'tags' | 'trash'>('tab', 'general')
 
   return (
     <div className="h-full overflow-y-auto scroll-thin">
@@ -71,6 +72,8 @@ export default function SettingsPage() {
               ['members', `Members (${ws.members.length})`],
               ['data', 'Import & export'],
               ['notifications', 'Notifications'],
+              ['tags', 'Tags'],
+              ['trash', 'Trash'],
             ] as const
           ).map(([k, l]) => (
             <button key={k} onClick={() => setTab(k)} className={cn('relative h-10 shrink-0 px-3 text-sm font-medium', tab === k ? 'after:bg-brand-600 after:absolute after:inset-x-1 after:bottom-0 after:h-0.5' : 'text-muted')}>
@@ -98,6 +101,8 @@ export default function SettingsPage() {
         {tab === 'members' && <Members canManage={canManage} />}
         {tab === 'data' && <ImportExport />}
         {tab === 'notifications' && <Notifications />}
+        {tab === 'tags' && <TagManager />}
+        {tab === 'trash' && <Trash />}
       </div>
     </div>
   )
