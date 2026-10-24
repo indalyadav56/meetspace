@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { format, isToday, isYesterday, parseISO } from 'date-fns'
-import { ArrowUp, CheckSquare, Film, Hash, MessageSquare, MessagesSquare, Pencil, Phone, PhoneCall, Plus, SmilePlus, Trash2, Video, X } from 'lucide-react'
+import { ArrowUp, CheckCheck, CheckSquare, Film, Filter, Hash, MessageSquare, MessagesSquare, Pencil, Phone, PhoneCall, Plus, Search, SmilePlus, SquarePen, Star, Trash2, UserPlus, Video, X } from 'lucide-react'
 import { useCall } from '../calls/useCall'
 import ClipPlayer from '../clips/ClipPlayer'
 import CallsPage from './CallsPage'
@@ -10,6 +10,7 @@ import { useMe, useStore } from '../../store/useStore'
 import type { Channel, ID, Message } from '../../store/types'
 import { Avatar, MenuItem, Modal, Popover, usePopover } from '../components/ui'
 import { cn, initials } from '../../lib/utils'
+import ChatSearch, { PresenceAvatar, liveStatusOf } from '../chat/ChatSearch'
 
 const QUICK_EMOJI = ['👍', '🎉', '❤️', '😂', '👀', '🙏', '🔥', '✅']
 
@@ -57,7 +58,7 @@ export function ChatCalls() {
 }
 
 function ChannelList({ active }: { active: ID }) {
-  const { channels, users, addChannel, openDM } = useStore()
+  const { channels, users, addChannel, openDM, favorites, toggleFavorite, markChannelRead } = useStore()
   const me = useMe()
   const nav = useNavigate()
   const title = useChannelTitle()
@@ -65,66 +66,136 @@ function ChannelList({ active }: { active: ID }) {
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [topic, setTopic] = useState('')
+  const [q, setQ] = useState('')
+  const [unreadOnly, setUnreadOnly] = useState(false)
+  const [dmQ, setDmQ] = useState('')
   const dmPop = usePopover()
   const liveCalls = useStore((s) => s.callLogs.filter((c) => !c.endedAt && c.liveParticipants?.length).length)
+  const totalUnread = [...unread.values()].reduce((a, b) => a + b, 0)
 
   const row = (c: Channel) => {
     const n = unread.get(c.id) ?? 0
     const other = c.kind === 'dm' ? c.members.find((m) => m !== me.id) : null
+    const st = other ? liveStatusOf(users.find((u) => u.id === other)) : undefined
+    const starred = favorites.includes(c.id)
     return (
-      <button
-        key={c.id}
-        onClick={() => nav(`/app/chat/${c.id}`)}
-        className={cn('flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px]', c.id === active ? 'bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100 font-medium' : 'hover-surface', n > 0 && 'font-semibold')}
-      >
-        {other ? <Avatar userId={other} size={18} /> : <Hash size={14} className="text-muted" />}
-        <span className="truncate">{title(c)}</span>
-        {n > 0 && <span className="bg-brand-600 ml-auto rounded-full px-1.5 text-[10px] font-bold text-white">{n}</span>}
-      </button>
+      <div key={c.id} className={cn('group flex h-8 w-full items-center rounded-md text-[13px]', c.id === active ? 'bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100 font-medium' : 'hover-surface', n > 0 && 'font-semibold')}>
+        <button onClick={() => nav(`/app/chat/${c.id}`)} className="flex h-full min-w-0 flex-1 items-center gap-2 pl-2 text-left">
+          {other ? <PresenceAvatar userId={other} /> : <Hash size={14} className="text-muted shrink-0" />}
+          <span className="truncate">{title(c)}</span>
+          {st?.emoji && (
+            <span className="shrink-0 text-[12px]" title={`${st.emoji} ${st.text}`.trim()}>
+              {st.emoji}
+            </span>
+          )}
+        </button>
+        <button onClick={() => toggleFavorite(c.id)} className={cn('shrink-0 rounded p-0.5', starred ? 'text-amber-400' : 'text-faint opacity-0 group-hover:opacity-100 focus-visible:opacity-100')} title={starred ? 'Unstar' : 'Star'} aria-label={`${starred ? 'Unstar' : 'Star'} ${title(c)}`}>
+          <Star size={12} className={starred ? 'fill-current' : ''} />
+        </button>
+        {n > 0 ? <span className="bg-brand-600 mr-2 ml-1 rounded-full px-1.5 text-[10px] font-bold text-white">{n}</span> : <span className="w-2" />}
+      </div>
     )
   }
+  const visible = (c: Channel) => !unreadOnly || (unread.get(c.id) ?? 0) > 0 || c.id === active
+  const starred = channels.filter((c) => favorites.includes(c.id) && visible(c))
+  const section = (label: string, list: Channel[], action?: ReactNode) => (
+    <>
+      <div className="flex items-center px-2 pt-3 pb-1">
+        <span className="text-faint text-[11px] font-semibold uppercase">{label}</span>
+        {action}
+      </div>
+      {list.map(row)}
+      {list.length === 0 && unreadOnly && <p className="text-faint px-2 py-1 text-[11px]">All caught up.</p>}
+    </>
+  )
+  const dmPeople = users
+    .filter((u) => u.id !== me.id && (u.name.toLowerCase().includes(dmQ.toLowerCase()) || u.email.toLowerCase().includes(dmQ.toLowerCase())))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   return (
-    <aside className="surface-subtle border-app hidden w-60 shrink-0 flex-col overflow-y-auto border-r p-2 scroll-thin sm:flex">
+    <aside className="surface-subtle border-app hidden w-64 shrink-0 flex-col overflow-y-auto border-r p-2 scroll-thin sm:flex">
       <div className="flex items-center px-2 py-2">
         <MessagesSquare size={17} className="text-brand-600 mr-2" />
         <h1 className="font-semibold">Chat</h1>
+        <span className="ml-auto flex items-center gap-0.5">
+          <button onClick={() => setUnreadOnly((v) => !v)} className={cn('rounded p-1', unreadOnly ? 'bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100' : 'text-muted hover-surface')} title={unreadOnly ? 'Show all conversations' : 'Show unread only'} aria-pressed={unreadOnly} aria-label="Unread only">
+            <Filter size={14} />
+          </button>
+          <button disabled={!totalUnread} onClick={() => channels.forEach((c) => (unread.get(c.id) ?? 0) > 0 && markChannelRead(c.id))} className="text-muted hover-surface rounded p-1 disabled:opacity-30" title="Mark all as read" aria-label="Mark all as read">
+            <CheckCheck size={14} />
+          </button>
+          <button onClick={() => setCreating(true)} className="text-muted hover-surface rounded p-1" title="New channel" aria-label="Create a channel">
+            <SquarePen size={14} />
+          </button>
+        </span>
       </div>
-      <button
-        onClick={() => nav('/app/chat/calls')}
-        className={cn('flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px]', active === 'calls' ? 'bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100 font-medium' : 'hover-surface')}
-      >
-        <PhoneCall size={14} className="text-muted" />
-        <span className="truncate">Calls & meetings</span>
-        {liveCalls > 0 && (
-          <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveCalls} live
-          </span>
+      <ChatSearch
+        q={q}
+        setQ={setQ}
+        channelTitle={title}
+        renderIdle={() => (
+          <>
+            <button
+              onClick={() => nav('/app/chat/calls')}
+              className={cn('flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px]', active === 'calls' ? 'bg-brand-50 text-brand-700 dark:bg-brand-600/20 dark:text-brand-100 font-medium' : 'hover-surface')}
+            >
+              <PhoneCall size={14} className="text-muted" />
+              <span className="truncate">Calls & meetings</span>
+              {liveCalls > 0 && (
+                <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveCalls} live
+                </span>
+              )}
+            </button>
+            {starred.length > 0 && section('Starred', starred)}
+            {section(
+              'Channels',
+              channels.filter((c) => c.kind === 'channel' && !favorites.includes(c.id) && visible(c)),
+              <button onClick={() => setCreating(true)} className="text-muted hover-surface ml-auto rounded p-0.5" aria-label="New channel">
+                <Plus size={14} />
+              </button>,
+            )}
+            {section(
+              'Direct messages',
+              channels.filter((c) => c.kind === 'dm' && !favorites.includes(c.id) && visible(c)),
+              <>
+                <button onClick={dmPop.toggle} className="text-muted hover-surface ml-auto rounded p-0.5" aria-label="New message">
+                  <Plus size={14} />
+                </button>
+                <Popover open={dmPop.open} anchor={dmPop.anchor} onClose={() => (dmPop.close(), setDmQ(''))} width={260}>
+                  <div className="border-app mb-1 flex items-center gap-2 border-b px-2 pb-1.5">
+                    <Search size={13} className="text-faint" />
+                    <input autoFocus value={dmQ} onChange={(e) => setDmQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && dmPeople[0] && (nav(`/app/chat/${openDM(dmPeople[0].id)}`), dmPop.close(), setDmQ(''))} placeholder="Find a teammate" className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none" aria-label="Find a teammate" />
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {dmPeople.map((u) => {
+                      const st = liveStatusOf(u)
+                      return (
+                        <MenuItem key={u.id} onClick={() => (nav(`/app/chat/${openDM(u.id)}`), dmPop.close(), setDmQ(''))}>
+                          <PresenceAvatar userId={u.id} size={22} />
+                          <span className="min-w-0">
+                            <span className="block truncate">{u.name}</span>
+                            <span className="text-faint block truncate text-[11px]">{st ? `${st.emoji} ${st.text}`.trim() : u.email}</span>
+                          </span>
+                        </MenuItem>
+                      )
+                    })}
+                    {dmPeople.length === 0 && <p className="text-muted px-2 py-3 text-center text-xs">No teammates match.</p>}
+                  </div>
+                  <div className="border-app mt-1 border-t pt-1">
+                    <MenuItem onClick={() => (nav('/app/settings?tab=members'), dmPop.close())}>
+                      <UserPlus size={14} className="text-muted" /> Invite teammates
+                    </MenuItem>
+                  </div>
+                </Popover>
+              </>,
+            )}
+            <button onClick={() => nav('/app/settings?tab=members')} className="text-muted hover-surface mt-2 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px]">
+              <UserPlus size={14} /> Invite teammates
+            </button>
+          </>
         )}
-      </button>
-      <div className="flex items-center px-2 pt-2 pb-1">
-        <span className="text-faint text-[11px] font-semibold uppercase">Channels</span>
-        <button onClick={() => setCreating(true)} className="text-muted hover-surface ml-auto rounded p-0.5" aria-label="New channel">
-          <Plus size={14} />
-        </button>
-      </div>
-      {channels.filter((c) => c.kind === 'channel').map(row)}
-      <div className="flex items-center px-2 pt-4 pb-1">
-        <span className="text-faint text-[11px] font-semibold uppercase">Direct messages</span>
-        <button onClick={dmPop.toggle} className="text-muted hover-surface ml-auto rounded p-0.5" aria-label="New message">
-          <Plus size={14} />
-        </button>
-        <Popover open={dmPop.open} anchor={dmPop.anchor} onClose={dmPop.close} width={220}>
-          {users
-            .filter((u) => u.id !== me.id)
-            .map((u) => (
-              <MenuItem key={u.id} onClick={() => (nav(`/app/chat/${openDM(u.id)}`), dmPop.close())}>
-                <Avatar userId={u.id} size={20} /> {u.name}
-              </MenuItem>
-            ))}
-        </Popover>
-      </div>
-      {channels.filter((c) => c.kind === 'dm').map(row)}
+      />
 
       <Modal open={creating} onClose={() => setCreating(false)} className="mt-[15vh] max-w-md">
         <form
@@ -187,9 +258,27 @@ function ChannelView({ channel }: { channel: Channel }) {
     markChannelRead(channel.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.id, top.length])
+  const [params, setParams] = useSearchParams()
+  const jump = params.get('m')
   useEffect(() => {
+    if (jump) return
     bottom.current?.scrollIntoView({ block: 'end' })
-  }, [top.length, channel.id])
+  }, [top.length, channel.id, jump])
+  // Opened from search: scroll to the message (or its thread) and flash it.
+  useEffect(() => {
+    if (!jump) return
+    const hit = messages.find((m) => m.id === jump)
+    if (!hit) return
+    if (hit.parentId) setThread(hit.parentId)
+    const t = setTimeout(() => {
+      const el = document.getElementById(`msg-${hit.parentId ?? hit.id}`)
+      el?.scrollIntoView({ block: 'center' })
+      el?.classList.add('msg-flash')
+      setTimeout(() => el?.classList.remove('msg-flash'), 2000)
+      setParams((p) => (p.delete('m'), p), { replace: true })
+    }, 60)
+    return () => clearTimeout(t)
+  }, [jump, messages, setParams])
 
   return (
     <div className="flex min-w-0 flex-1">
@@ -296,7 +385,7 @@ function MessageItem({ message: m, grouped, replies, onThread, inThread }: { mes
   const mine = m.userId === me.id
 
   return (
-    <div className={cn('group hover-surface relative flex gap-3 rounded-lg px-2', grouped ? 'py-0.5' : 'mt-2 py-1.5')}>
+    <div id={`msg-${m.id}`} className={cn('group hover-surface relative flex gap-3 rounded-lg px-2 transition-colors', grouped ? 'py-0.5' : 'mt-2 py-1.5')}>
       <div className="w-9 shrink-0">
         {!grouped ? <Avatar userId={m.userId} size={36} /> : <span className="text-faint hidden pt-1 text-[10px] group-hover:block">{format(parseISO(m.createdAt), 'h:mm')}</span>}
       </div>

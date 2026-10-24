@@ -10,12 +10,13 @@ import { useAssistant } from './ai/useAssistant'
 import { CallPill } from './calls/CallLayer'
 import QuickActions from './QuickActions'
 import { useCall } from './calls/useCall'
+import { useCreateTask } from './task/CreateTaskModal'
 import AccountMenu, { liveStatus } from './AccountMenu'
 import { isMuted, usePersonal } from './personal'
 
 export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
   const me = useMe()
-  const { logout, toggleSidebar, lists, addTask, openTask } = useStore()
+  const { logout, toggleSidebar } = useStore()
   const myStatus = liveStatus(me)
   const mutedUntil = usePersonal((s) => s.mutedUntil)
   const muted = isMuted(mutedUntil)
@@ -45,11 +46,8 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
   const [confirmLogout, setConfirmLogout] = useState(false)
 
   const quickTask = () => {
-    const listId = lists[0]?.id
-    if (!listId) return
-    const id = addTask({ listId, title: 'New task', assignees: [me.id] })
-    openTask(id)
     newMenu.close()
+    useCreateTask.getState().open({ listId: location.pathname.match(/\/app\/list\/([^/]+)/)?.[1], assignees: [me.id] })
   }
 
   return (

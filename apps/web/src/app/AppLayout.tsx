@@ -10,6 +10,7 @@ import Sidebar, { hasSectionSidebar } from './SectionSidebar'
 import TopBar from './TopBar'
 import Rail from './Rail'
 import TaskDetail from './task/TaskDetail'
+import CreateTaskModal from './task/CreateTaskModal'
 import CommandPalette from './CommandPalette'
 import { cn } from '../lib/utils'
 import { X } from 'lucide-react'
@@ -110,6 +111,7 @@ export default function AppLayout() {
         </main>
       </div>
       <TaskDetail />
+      <CreateTaskModal />
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
       <ShortcutsHelp open={help} onClose={() => setHelp(false)} />
       <AssistantPanel />
