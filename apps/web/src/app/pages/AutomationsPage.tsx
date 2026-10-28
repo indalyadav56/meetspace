@@ -21,6 +21,7 @@ export const ACTIONS: { type: ActionType; label: string }[] = [
   { type: 'add_comment', label: 'Post a comment' },
   { type: 'set_due_in', label: 'Set due date in (days)' },
   { type: 'notify', label: 'Send me a notification' },
+  { type: 'ai_triage', label: 'AI triage (priority, tags, owner)' },
 ]
 
 /** Human-readable value for a trigger/action given its space. */
@@ -33,6 +34,7 @@ function useDescribe() {
     if (kind === 'assignee_added' || kind === 'add_assignee') return users.find((u) => u.id === value)?.name ?? value
     if (kind === 'set_due_in') return `${value} day${value === '1' ? '' : 's'}`
     if (kind === 'add_tag') return `#${value}`
+    if (kind === 'ai_triage') return value ? `following “${value}”` : 'with AI'
     return `“${value}”`
   }
 }
@@ -49,6 +51,10 @@ const RECIPES: { name: string; build: (s: Space) => Omit<Automation, 'id' | 'run
   {
     name: 'New tasks get a 3-day deadline',
     build: () => ({ name: 'Default deadline', trigger: { type: 'task_created', value: '' }, actions: [{ type: 'set_due_in', value: '3' }] }),
+  },
+  {
+    name: 'AI triages new tasks',
+    build: () => ({ name: 'AI triage', trigger: { type: 'task_created', value: '' }, actions: [{ type: 'ai_triage', value: '' }] }),
   },
   {
     name: 'Assigned → set priority normal',
@@ -181,7 +187,7 @@ function ValuePicker({ kind, value, onChange, space }: { kind: TriggerType | Act
       value={value}
       onChange={(e) => onChange(e.target.value)}
       type={kind === 'set_due_in' ? 'number' : 'text'}
-      placeholder={kind === 'add_tag' ? 'tag name' : kind === 'set_due_in' ? 'days' : 'message'}
+      placeholder={kind === 'add_tag' ? 'tag name' : kind === 'set_due_in' ? 'days' : kind === 'ai_triage' ? 'optional guidance, e.g. “Marcus owns payments”' : 'message'}
       className={cn(cls, 'min-w-0 flex-1')}
     />
   )
@@ -202,7 +208,7 @@ function Builder({ space, initial, onClose }: { space: Space; initial: Automatio
   const [actions, setActions] = useState<AutomationAction[]>(initial?.actions ?? [{ type: 'add_comment', value: 'Heads up — this task changed.' }])
 
   const save = () => {
-    const clean = actions.filter((a) => a.value || a.type === 'notify')
+    const clean = actions.filter((a) => a.value || a.type === 'notify' || a.type === 'ai_triage')
     if (!clean.length) return
     const data = { name: name.trim() || 'Untitled automation', trigger, actions: clean }
     if (initial) updateAutomation(initial.id, data)

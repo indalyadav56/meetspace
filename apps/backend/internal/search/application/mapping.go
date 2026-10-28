@@ -74,6 +74,11 @@ func toDocument(c Change) (domain.Document, bool) {
 		return domain.Document{}, false
 	}
 	d := domain.Document{WorkspaceID: c.WorkspaceID, Type: typ, EntityID: it.str("id"), Audience: c.Audience}
+	// Messages and comments carry the writer as userId; everything else as createdBy.
+	d.Author = it.str("createdBy")
+	if d.Author == "" {
+		d.Author = it.str("userId")
+	}
 	switch typ {
 	case "task":
 		d.Title, d.Body, d.Parent = it.str("title"), plain(it.str("description")), it.str("listId")

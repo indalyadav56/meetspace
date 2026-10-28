@@ -9,16 +9,18 @@ import { useQueryState } from '../../../lib/useQueryState'
 import { AGENT_TEMPLATES, errorText, useAgents } from './agentsStore'
 import SkillsView from './SkillsView'
 import { cn } from '../../../lib/utils'
+import AskWorkspace from './AskWorkspace'
 
 /** Full-page assistant: ask anything, or run a saved agent. */
 export default function AIPage() {
-  const [view, setView] = useQueryState<'ask' | 'agents' | 'skills'>('view', 'ask')
+  const [view, setView] = useQueryState<'ask' | 'agents' | 'skills' | 'workspace'>('view', 'ask')
   const ws = useStore((s) => s.currentWorkspaceId)
   const { workspaceId, load } = useAgents()
   useEffect(() => {
     if (ws && workspaceId !== ws) void load(ws)
   }, [ws, workspaceId, load])
   if (view === 'skills') return <SkillsView onChat={() => setView('ask')} />
+  if (view === 'workspace') return <AskWorkspace />
   return view === 'agents' ? <AgentsView onChat={() => setView('ask')} /> : <AskView onAgents={() => setView('agents')} />
 }
 
@@ -257,6 +259,7 @@ function AgentEditor({ initial, onClose }: { initial: Omit<SavedAgent, 'id'> & {
           <textarea rows={6} maxLength={4000} value={a.instructions} onChange={(e) => setA({ ...a, instructions: e.target.value })} placeholder="How should this agent answer? What should it focus on?" className={field} />
         </label>
         <p className="text-faint mt-1 text-xs">Instructions are added to every question asked through this agent.</p>
+        <ScheduleFields a={a} setA={setA} field={field} />
         {error && <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/15 dark:text-red-200">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="hover-surface rounded-lg px-3 py-1.5 text-sm">
@@ -271,3 +274,67 @@ function AgentEditor({ initial, onClose }: { initial: Omit<SavedAgent, 'id'> & {
   )
 }
 
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/** Let an agent run by itself and post what it finds to a channel. */
+function ScheduleFields({ a, setA, field }: { a: Omit<SavedAgent, 'id'> & { id?: string }; setA: (a: Omit<SavedAgent, 'id'> & { id?: string }) => void; field: string }) {
+  const channels = useStore((s) => s.channels.filter((c) => c.kind === 'channel'))
+  const schedule = a.schedule ?? 'none'
+  const set = (patch: Partial<SavedAgent>) =>
+    setA({ ...a, schedule, scheduleTime: a.scheduleTime ?? '09:00', scheduleDay: a.scheduleDay ?? 1, timezone: a.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', schedulePrompt: a.schedulePrompt ?? '', channelId: a.channelId ?? channels[0]?.id ?? null, ...patch })
+  const sel = 'border-app surface h-8 rounded-md border px-2 text-sm'
+  return (
+    <section className="border-app mt-4 rounded-lg border p-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        Run on a schedule
+        <select value={schedule} onChange={(e) => set({ schedule: e.target.value as SavedAgent['schedule'] })} className={cn(sel, 'ml-auto')} aria-label="Schedule">
+          <option value="none">Off</option>
+          <option value="daily">Every day</option>
+          <option value="weekdays">Weekdays</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+      {schedule !== 'none' && (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {schedule === 'weekly' && (
+              <select value={a.scheduleDay ?? 1} onChange={(e) => set({ scheduleDay: Number(e.target.value) })} className={sel} aria-label="Day">
+                {DAYS.map((d, i) => (
+                  <option key={d} value={i}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            )}
+            at
+            <input type="time" value={a.scheduleTime ?? '09:00'} onChange={(e) => set({ scheduleTime: e.target.value })} className={sel} aria-label="Time" />
+            <span className="text-faint text-xs">{a.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+          </div>
+          <label className="block text-sm">
+            What to do each time
+            <textarea rows={2} maxLength={2000} value={a.schedulePrompt ?? ''} onChange={(e) => set({ schedulePrompt: e.target.value })} placeholder="e.g. Write the team standup from yesterday’s activity and flag anything overdue." className={field} />
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            Post the result in
+            <select value={a.channelId ?? ''} onChange={(e) => set({ channelId: e.target.value || null })} className={sel} aria-label="Channel">
+              <option value="">Nowhere (just keep the last result)</option>
+              {channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  #{c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {a.nextRunAt && <p className="text-faint text-xs">Next run {new Date(a.nextRunAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.</p>}
+          {a.lastResult && (
+            <details className="text-xs">
+              <summary className="text-muted cursor-pointer">Last run{a.lastRunAt && ` · ${new Date(a.lastRunAt).toLocaleString()}`}</summary>
+              <p className="surface-muted mt-1 max-h-40 overflow-y-auto rounded-md p-2 whitespace-pre-wrap">{a.lastResult}</p>
+            </details>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}

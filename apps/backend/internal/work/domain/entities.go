@@ -46,6 +46,10 @@ type Project struct {
 	Color       string    `json:"color"`
 	Statuses    []Status  `json:"statuses"`
 	CreatedAt   time.Time `json:"createdAt"`
+	// Private Spaces are visible only to Members and workspace owners/admins.
+	Private bool `json:"private"`
+	// Members are people explicitly added to the Space (the only way guests see it).
+	Members []string `json:"members"`
 	Details
 }
 
@@ -121,13 +125,27 @@ type Task struct {
 	Custom      map[string]any  `json:"custom"`
 	SprintID    *string         `json:"sprintId"`
 	Points      *float64        `json:"points"`
-	Watchers    []string        `json:"watchers"`
+	// IssueType is task, story, bug or epic.
+	IssueType string `json:"issueType"`
+	// EpicID links a task to the epic it rolls up into (any List, any Space).
+	EpicID   *string  `json:"epicId"`
+	Watchers []string `json:"watchers"`
 	ClipIDs     []string        `json:"clipIds"`
 	Order       float64         `json:"order"`
 	CreatedBy   *string         `json:"createdBy"`
 	CreatedAt   time.Time       `json:"createdAt"`
 	UpdatedAt   time.Time       `json:"updatedAt"`
 }
+
+// Issue types, as in Jira.
+const (
+	IssueTask  = "task"
+	IssueStory = "story"
+	IssueBug   = "bug"
+	IssueEpic  = "epic"
+)
+
+var IssueTypes = map[string]bool{IssueTask: true, IssueStory: true, IssueBug: true, IssueEpic: true}
 
 type Comment struct {
 	ID        string    `json:"id"`
@@ -261,6 +279,9 @@ var (
 	ErrFolderNotFound     = apperror.NotFound("folder_not_found", "folder not found")
 	ErrListNotFound       = apperror.NotFound("list_not_found", "list not found")
 	ErrTaskNotFound       = apperror.NotFound("task_not_found", "task not found")
+	ErrInboxNotFound      = apperror.NotFound("inbox_not_found", "this List has no email address")
+	ErrInvalidIssueType   = apperror.Invalid("invalid_issue_type", "type must be task, story, bug or epic")
+	ErrBadEpic            = apperror.Invalid("invalid_epic", "a task can only be linked to an epic, and epics can't belong to other epics")
 	ErrCommentNotFound    = apperror.NotFound("comment_not_found", "comment not found")
 	ErrFieldNotFound      = apperror.NotFound("field_not_found", "custom field not found")
 	ErrEntryNotFound      = apperror.NotFound("time_entry_not_found", "time entry not found")

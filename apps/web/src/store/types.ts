@@ -40,6 +40,10 @@ export interface Space extends Details {
   name: string
   color: string
   statuses: Status[]
+  /** visible only to members (and workspace owners/admins) */
+  private?: boolean
+  /** people added to the Space; the only way guests see it */
+  members?: ID[]
 }
 
 export interface Folder {
@@ -81,6 +85,8 @@ export interface CustomField {
 
 export type CustomValue = string | number | boolean | null
 
+export type IssueType = 'task' | 'story' | 'bug' | 'epic'
+
 export interface Task {
   id: ID
   key: number
@@ -103,6 +109,9 @@ export interface Task {
   sprintId: ID | null
   /** story points */
   points: number | null
+  issueType: IssueType
+  /** the epic this task rolls up into */
+  epicId: ID | null
   watchers: ID[]
   /** recorded Clips attached to the task */
   clipIds: ID[]
@@ -207,7 +216,7 @@ export interface Goal {
 }
 
 export type TriggerType = 'status_changed' | 'task_created' | 'priority_changed' | 'assignee_added'
-export type ActionType = 'set_status' | 'set_priority' | 'add_assignee' | 'add_tag' | 'add_comment' | 'set_due_in' | 'notify'
+export type ActionType = 'set_status' | 'set_priority' | 'add_assignee' | 'add_tag' | 'add_comment' | 'set_due_in' | 'notify' | 'ai_triage'
 
 export interface AutomationAction {
   type: ActionType

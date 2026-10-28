@@ -17,6 +17,10 @@ import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
 import TableHeader from '@tiptap/extension-table-header'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import type * as Y from 'yjs'
+import type { Awareness } from 'y-protocols/awareness'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import { createLowlight, common } from 'lowlight'
 import { filterCommands, useSlash, type SlashCommand } from './slash'
@@ -93,9 +97,18 @@ const SlashCommands = Extension.create({
 const lowlight = createLowlight(common)
 
 /** Everything the full doc editor supports. */
-export function docExtensions(placeholder: string) {
+/** Live co-editing: the shared Yjs doc plus everyone's cursors. */
+export interface CollabOptions {
+  doc: Y.Doc
+  awareness: Awareness
+  user: { name: string; color: string }
+}
+
+export function docExtensions(placeholder: string, collab?: CollabOptions) {
   return [
-    StarterKit.configure({ codeBlock: false, heading: { levels: [1, 2, 3] } }),
+    // Yjs keeps its own undo history, so the editor's is turned off when co-editing.
+    StarterKit.configure({ codeBlock: false, heading: { levels: [1, 2, 3] }, ...(collab ? { history: false } : {}) }),
+    ...(collab ? [Collaboration.configure({ document: collab.doc }), CollaborationCursor.configure({ provider: { awareness: collab.awareness }, user: collab.user })] : []),
     Placeholder.configure({
       placeholder: ({ node }) => (node.type.name === 'heading' ? `Heading ${node.attrs.level}` : placeholder),
       includeChildren: false,

@@ -41,6 +41,11 @@ func (m *memUsers) GetByEmail(_ context.Context, email string) (*domain.User, er
 func (m *memUsers) ListByIDs(context.Context, []string) ([]domain.User, error)  { return nil, nil }
 func (m *memUsers) UpdateProfile(context.Context, string, string, string) error { return nil }
 func (m *memUsers) UpdateLastLogin(context.Context, string, time.Time) error    { return nil }
+func (m *memUsers) SetTOTP(_ context.Context, id string, sealed []byte, enabled bool, recovery []string) error {
+	u := m.byID[id]
+	u.TOTPSecret, u.TOTPEnabled, u.TOTPRecovery = sealed, enabled, recovery
+	return nil
+}
 func (m *memUsers) UpdateStatus(_ context.Context, id, emoji, text string, until *time.Time) error {
 	u := m.byID[id]
 	u.StatusEmoji, u.StatusText, u.StatusUntil = emoji, text, until
@@ -52,6 +57,26 @@ func (m *memUsers) UpdatePassword(_ context.Context, id, hash string) error {
 }
 
 type memTokens struct{ list []*domain.RefreshToken }
+
+func (m *memTokens) Sessions(_ context.Context, userID string) ([]domain.Session, error) {
+	seen := map[string]bool{}
+	var out []domain.Session
+	for _, t := range m.list {
+		if t.UserID == userID && !t.Revoked && !seen[t.SessionID] {
+			seen[t.SessionID] = true
+			out = append(out, domain.Session{ID: t.SessionID, UserAgent: t.UserAgent, IP: t.IP})
+		}
+	}
+	return out, nil
+}
+func (m *memTokens) RevokeUserSession(_ context.Context, userID, sid string) error {
+	for _, t := range m.list {
+		if t.UserID == userID && t.SessionID == sid {
+			t.Revoked = true
+		}
+	}
+	return nil
+}
 
 func (m *memTokens) Create(_ context.Context, t *domain.RefreshToken) error {
 	t.ID = "t" + strconv.Itoa(len(m.list)+1)

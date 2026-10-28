@@ -3,7 +3,8 @@ import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-do
 import { useStore } from './store/useStore'
 import Landing from './marketing/Landing'
 import Pricing from './marketing/Pricing'
-import { LoginPage } from './marketing/Auth'
+import { AuthCallbackPage, LoginPage } from './marketing/Auth'
+import SharedPage from './marketing/SharedPage'
 import SignupPage from './marketing/Signup'
 import { ForgotPasswordPage, ResetPasswordPage } from './marketing/PasswordReset'
 import AppLayout from './app/AppLayout'
@@ -11,6 +12,9 @@ import Home from './app/pages/Home'
 import Inbox from './app/pages/Inbox'
 import DocsPage from './app/pages/DocsPage'
 import Dashboards from './app/pages/Dashboards'
+import NotificationFeed from './app/notifications/NotificationFeed'
+import RoadmapPage from './app/pages/RoadmapPage'
+import SearchPage from './app/pages/SearchPage'
 import ListPage from './app/pages/ListPage'
 import SpacePage from './app/pages/SpacePage'
 import Everything from './app/pages/Everything'
@@ -97,6 +101,8 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route path="/s/:token" element={<SharedPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -112,6 +118,9 @@ export default function App() {
         <Route index element={<Navigate to="home" replace />} />
         <Route path="home" element={<Home />} />
         <Route path="inbox" element={<Inbox />} />
+        <Route path="notifications" element={<NotificationFeed />} />
+        <Route path="roadmap" element={<RoadmapPage />} />
+        <Route path="search" element={<SearchPage />} />
         <Route path="docs" element={<DocsPage />} />
         <Route path="docs/:docId" element={<DocsPage />} />
         <Route path="dashboards" element={<Dashboards />} />

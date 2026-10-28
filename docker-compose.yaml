@@ -12,7 +12,7 @@ x-backend-env: &backend-env
   APP_LIVEKIT_API_URL: http://livekit:7880
   APP_LIVEKIT_API_KEY: devkey
   APP_LIVEKIT_API_SECRET: meetspace-dev-livekit-secret-0123456789
-  APP_AI_GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  APP_AI_GEMINI_API_KEY: ${APP_AI_GEMINI_API_KEY:-${GEMINI_API_KEY:-}}
   APP_WEB_URL: http://localhost
   APP_MEDIA_STORAGE: minio
   APP_MINIO_ENDPOINT: minio:9000

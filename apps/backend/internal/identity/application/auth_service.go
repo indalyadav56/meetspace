@@ -17,6 +17,7 @@ import (
 	"github.com/indalyadav56/meetspace/backend/internal/identity/domain"
 	"github.com/indalyadav56/meetspace/backend/pkg/apperror"
 	"github.com/indalyadav56/meetspace/backend/pkg/password"
+	"github.com/indalyadav56/meetspace/backend/pkg/secretbox"
 )
 
 const refreshTokenBytes = 32
@@ -45,6 +46,10 @@ type AuthService struct {
 	email  EmailSender
 	cfg    AuthConfig
 	now    func() time.Time
+	// set by EnableSecurity
+	box        *secretbox.Box
+	key        []byte
+	identities domain.IdentityRepository
 }
 
 func NewAuthService(users domain.UserRepository, tokens domain.RefreshTokenRepository, resets domain.PasswordResetTokenRepository, hasher PasswordHasher, signer TokenSigner, email EmailSender, cfg AuthConfig) *AuthService {
@@ -106,19 +111,8 @@ func (s *AuthService) Login(ctx context.Context, email, plain string) (*domain.U
 	if err := s.hasher.Compare(u.PasswordHash, plain); err != nil {
 		return nil, nil, domain.ErrInvalidCredentials
 	}
-	if !u.IsActive {
-		return nil, nil, domain.ErrUserInactive
-	}
-	now := s.now()
-	if err := s.users.UpdateLastLogin(ctx, u.ID, now); err != nil {
-		return nil, nil, err
-	}
-	u.LastLoginAt = &now
-	pair, err := s.issueTokens(ctx, u.ID, uuid.NewString(), nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	return u, pair, nil
+	// May stop at *MFARequired when the account has two-factor turned on.
+	return s.finishLogin(ctx, u)
 }
 
 // Refresh rotates a refresh token. Presenting an already-revoked token is
@@ -234,7 +228,8 @@ func (s *AuthService) issueTokens(ctx context.Context, userID, sessionID string,
 	if err != nil {
 		return nil, err
 	}
-	if err := s.tokens.Create(ctx, &domain.RefreshToken{UserID: userID, SessionID: sessionID, TokenHash: hashToken(raw), Parent: parent, ExpiresAt: s.now().Add(s.cfg.RefreshTTL)}); err != nil {
+	cl := clientOf(ctx)
+	if err := s.tokens.Create(ctx, &domain.RefreshToken{UserID: userID, SessionID: sessionID, TokenHash: hashToken(raw), Parent: parent, ExpiresAt: s.now().Add(s.cfg.RefreshTTL), UserAgent: cl.UserAgent, IP: cl.IP}); err != nil {
 		return nil, err
 	}
 	return &TokenPair{AccessToken: access, RefreshToken: raw, TokenType: "Bearer", ExpiresIn: int64(s.cfg.AccessTTL.Seconds())}, nil

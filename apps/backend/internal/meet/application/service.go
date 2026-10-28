@@ -387,3 +387,8 @@ func (s *Service) Snapshot(ctx context.Context, ws, _ string) (map[string]any, e
 	}
 	return map[string]any{"meetings": ms, "callLogs": cs, "meetEnabled": s.rooms != nil}, nil
 }
+
+// Meetings lists every meeting in the workspace (calendar feeds filter by attendee).
+func (s *Service) Meetings(ctx context.Context, ws string) ([]domain.Meeting, error) {
+	return s.repo.ListMeetings(ctx, ws)
+}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/indalyadav56/meetspace/backend/internal/work/domain"
 	"github.com/indalyadav56/meetspace/backend/pkg/apperror"
@@ -39,6 +40,8 @@ type TaskInput struct {
 	Custom      map[string]any         `json:"custom"`
 	SprintID    *string                `json:"sprintId"`
 	Points      *float64               `json:"points"`
+	IssueType   string                 `json:"issueType"`
+	EpicID      *string                `json:"epicId"`
 }
 
 // TaskPatch is a partial update; absent fields are untouched and JSON null clears.
@@ -58,8 +61,10 @@ type TaskPatch struct {
 	// Custom is merged key by key; a null value removes that key.
 	Custom   optional.Field[map[string]any] `json:"custom"`
 	SprintID optional.Field[string]         `json:"sprintId"`
-	Points   optional.Field[float64]        `json:"points"`
-	Watchers optional.Field[[]string]       `json:"watchers"`
+	Points    optional.Field[float64]        `json:"points"`
+	IssueType optional.Field[string]         `json:"issueType"`
+	EpicID    optional.Field[string]         `json:"epicId"`
+	Watchers  optional.Field[[]string]       `json:"watchers"`
 	ClipIDs  optional.Field[[]string]       `json:"clipIds"`
 	Order    optional.Field[float64]        `json:"order"`
 }
@@ -136,6 +141,15 @@ func (s *Service) CreateTask(ctx context.Context, ws, actorID string, in TaskInp
 	if err := s.requireMembers(ctx, ws, assignees); err != nil {
 		return nil, err
 	}
+	if in.IssueType == "" {
+		in.IssueType = domain.IssueTask
+	}
+	if !domain.IssueTypes[in.IssueType] {
+		return nil, domain.ErrInvalidIssueType
+	}
+	if err := s.checkEpic(ctx, ws, "", in.IssueType, in.EpicID); err != nil {
+		return nil, err
+	}
 	key, err := s.keys.NextTaskKey(ctx, ws)
 	if err != nil {
 		return nil, err
@@ -159,7 +173,7 @@ func (s *Service) CreateTask(ctx context.Context, ws, actorID string, in TaskInp
 		WorkspaceID: ws, Key: key, ListID: in.ListID, ParentID: in.ParentID, Title: title, Description: in.Description,
 		StatusID: status, Priority: in.Priority, Assignees: assignees, Tags: cleanTags(in.Tags), StartDate: in.StartDate,
 		DueDate: in.DueDate, Estimate: in.Estimate, Checklist: checklist, Recurrence: in.Recurrence, Custom: in.Custom,
-		SprintID: in.SprintID, Points: in.Points, Order: maxOrder + 1, CreatedBy: createdBy,
+		SprintID: in.SprintID, Points: in.Points, Order: maxOrder + 1, CreatedBy: createdBy, IssueType: in.IssueType, EpicID: in.EpicID,
 	}
 	if err := s.repo.CreateTask(ctx, t); err != nil {
 		return nil, err
@@ -291,6 +305,22 @@ func (s *Service) UpdateTask(ctx context.Context, ws, actorID, id string, p Task
 	if p.Points.Set {
 		t.Points = p.Points.Value
 	}
+	wasEpic := t.IssueType == domain.IssueEpic
+	if p.IssueType.Set && p.IssueType.Value != nil {
+		if !domain.IssueTypes[*p.IssueType.Value] {
+			return nil, domain.ErrInvalidIssueType
+		}
+		t.IssueType = *p.IssueType.Value
+		if t.IssueType == domain.IssueEpic {
+			t.EpicID = nil // epics don't nest
+		}
+	}
+	if p.EpicID.Set {
+		if err := s.checkEpic(ctx, ws, t.ID, t.IssueType, p.EpicID.Value); err != nil {
+			return nil, err
+		}
+		t.EpicID = p.EpicID.Value
+	}
 	if p.Watchers.Set {
 		next := uniq(deref(p.Watchers.Value))
 		if err := s.requireMembers(ctx, ws, next); err != nil {
@@ -309,8 +339,43 @@ func (s *Service) UpdateTask(ctx context.Context, ws, actorID, id string, p Task
 		return nil, err
 	}
 	s.emit(ctx, ws, "tasks", "upsert", t)
+	if wasEpic && t.IssueType != domain.IssueEpic {
+		s.releaseEpic(ctx, ws, t.ID)
+	}
 	s.afterUpdate(ctx, &prev, t, proj, actorID, 0)
 	return t, nil
+}
+
+// checkEpic validates linking task (empty when new) of the given type to epicID.
+func (s *Service) checkEpic(ctx context.Context, ws, taskID, issueType string, epicID *string) error {
+	if epicID == nil {
+		return nil
+	}
+	if issueType == domain.IssueEpic || *epicID == taskID {
+		return domain.ErrBadEpic
+	}
+	epic, err := s.repo.GetTask(ctx, ws, *epicID)
+	if err != nil {
+		return err
+	}
+	if epic.IssueType != domain.IssueEpic {
+		return domain.ErrBadEpic
+	}
+	return nil
+}
+
+// releaseEpic unlinks the children of a task that stopped being an epic.
+func (s *Service) releaseEpic(ctx context.Context, ws, epicID string) {
+	ids, err := s.repo.UnlinkEpic(ctx, ws, epicID)
+	if err != nil {
+		s.log.Warn("unlinking epic children", zap.Error(err))
+		return
+	}
+	for _, id := range ids {
+		if t, err := s.repo.GetTask(ctx, ws, id); err == nil {
+			s.emit(ctx, ws, "tasks", "upsert", t)
+		}
+	}
 }
 
 // afterUpdate runs the side effects of a change from prev to t.

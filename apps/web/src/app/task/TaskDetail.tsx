@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUp, Ban, Sparkles, Eye, BellRing, Phone, Film, Circle as RecordIcon, Gauge, CalendarDays, Check, ChevronRight, CircleDot, Clock, Copy, Flag, Hourglass, Link2, ListChecks, MoreHorizontal, Plus, Repeat, Star, Tag as TagIcon, Timer, Trash2, Users, X, Zap } from 'lucide-react'
 import { BOT, useMe, useStore } from '../../store/useStore'
+import type { Task } from '../../store/types'
 import { useAssistant } from '../ai/useAssistant'
 import { useCall } from '../calls/useCall'
 import { useRecorder } from '../clips/Recorder'
@@ -11,6 +12,8 @@ import { GitHubSection } from './GitHubSection'
 import { useTaskResolver } from '../hooks'
 import { AssigneeMenu, Avatar, DateButton, MenuItem, Modal, Popover, PriorityMenu, StatusDot, StatusMenu, Tag, usePopover } from '../components/ui'
 import { RichText } from '../components/RichText'
+import { EpicChip, EpicMenu, IssueIcon, IssueTypeMenu } from '../components/issue'
+import { useCreateTask } from './CreateTaskModal'
 import { cn, timeAgo, uid } from '../../lib/utils'
 
 export default function TaskDetail() {
@@ -160,7 +163,14 @@ function TaskBody({ id }: { id: string }) {
         {/* Main column */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 scroll-thin sm:px-10">
           <div className="text-muted mb-2 flex items-center gap-2 text-xs">
-            <CircleDot size={13} /> Task
+            <IssueTypeMenu value={task.issueType ?? 'task'} onChange={(v) => up(v === 'epic' ? { issueType: v, epicId: null } : { issueType: v })} className="font-medium" />
+            <span className="font-mono">MS-{task.key}</span>
+            {task.epicId && task.issueType !== 'epic' && (
+              <>
+                <span className="text-faint">·</span>
+                <EpicChip epicId={task.epicId} onClick={() => s.openTask(task.epicId)} />
+              </>
+            )}
           </div>
           <textarea
             value={task.title}
@@ -169,6 +179,7 @@ function TaskBody({ id }: { id: string }) {
             className="w-full resize-none bg-transparent text-2xl font-bold tracking-tight outline-none [field-sizing:content]"
           />
 
+          {task.issueType === 'epic' && <EpicChildren epic={task} />}
           {openBlockers.length > 0 && (
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-600 dark:bg-red-500/10 dark:text-red-300">
               <Ban size={13} /> Blocked by {openBlockers.map((b) => b.title).join(', ')}
@@ -249,6 +260,11 @@ function TaskBody({ id }: { id: string }) {
                   ))}
               </select>
             </Field>
+            {task.issueType !== 'epic' && (
+              <Field icon={Zap} label="Epic">
+                <EpicMenu value={task.epicId} onChange={(v) => up({ epicId: v })} task={task} />
+              </Field>
+            )}
             <Field icon={Gauge} label="Story points">
               <input
                 type="number"
@@ -567,5 +583,55 @@ function ReminderButton({ taskId, title }: { taskId: string; title: string }) {
         ))}
       </Popover>
     </>
+  )
+}
+
+/** An epic's child issues from anywhere in the workspace, with roll-up progress. */
+function EpicChildren({ epic }: { epic: Task }) {
+  const s = useStore()
+  const r = useTaskResolver()
+  const kids = s.tasks.filter((t) => t.epicId === epic.id)
+  const done = kids.filter((t) => r.isDone(t)).length
+  const pts = kids.reduce((n, t) => n + (t.points ?? 0), 0)
+  const donePts = kids.filter((t) => r.isDone(t)).reduce((n, t) => n + (t.points ?? 0), 0)
+  const pct = kids.length ? Math.round((done / kids.length) * 100) : 0
+  const add = () => useCreateTask.getState().open({ listId: epic.listId, epicId: epic.id })
+  return (
+    <section className="border-app mt-4 rounded-xl border p-3">
+      <div className="mb-2 flex items-center gap-2 text-sm">
+        <span className="font-semibold">Child issues</span>
+        <span className="text-faint text-xs">
+          {done}/{kids.length} done{pts > 0 && ` · ${donePts}/${pts} pts`}
+        </span>
+        <button onClick={add} className="text-brand-600 ml-auto text-xs font-semibold hover:underline">
+          + Add child issue
+        </button>
+      </div>
+      <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-[var(--bg-hover)]">
+        <div className="h-full rounded-full bg-emerald-500 transition-[width]" style={{ width: `${pct}%` }} />
+      </div>
+      {kids.length === 0 ? (
+        <p className="text-muted text-xs">No child issues yet. Link tasks to this epic from their Epic field, or add one here.</p>
+      ) : (
+        <ul className="divide-y divide-[var(--border)]">
+          {kids.slice(0, 50).map((t) => {
+            const st = r.statusOf(t)
+            return (
+              <li key={t.id}>
+                <button onClick={() => s.openTask(t.id)} className="hover-surface flex w-full items-center gap-2 rounded px-1 py-1.5 text-left text-sm">
+                  <IssueIcon type={t.issueType} size={14} />
+                  <span className="text-faint shrink-0 font-mono text-[11px]">MS-{t.key}</span>
+                  <span className={cn('min-w-0 flex-1 truncate', r.isDone(t) && 'text-faint line-through')}>{t.title}</span>
+                  <span className="text-faint hidden shrink-0 text-[11px] sm:inline">{r.listName(t.listId)}</span>
+                  <span className="shrink-0 rounded px-1.5 py-px text-[10px] font-semibold uppercase text-white" style={{ background: st?.color }}>
+                    {st?.name}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }

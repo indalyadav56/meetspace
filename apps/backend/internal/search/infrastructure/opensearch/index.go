@@ -48,6 +48,7 @@ const mapping = `{
       "entity_id": { "type": "keyword" },
       "parent": { "type": "keyword" },
       "key": { "type": "keyword", "normalizer": "lowercase" },
+      "author": { "type": "keyword" },
       "audience": { "type": "keyword" },
       "public": { "type": "boolean" },
       "updated_at": { "type": "date" },
@@ -76,6 +77,11 @@ func New(ctx context.Context, cfg Config) (*Index, error) {
 func (ix *Index) ensure(ctx context.Context) error {
 	res, err := ix.client.Indices.Exists(ctx, opensearchapi.IndicesExistsReq{Indices: []string{ix.name}})
 	if err == nil && res.StatusCode == http.StatusOK {
+		// Indexes created before a field existed get it added; new fields only, so this is safe to repeat.
+		_, err := ix.client.Indices.Mapping.Put(ctx, opensearchapi.MappingPutReq{Indices: []string{ix.name}, Body: strings.NewReader(`{"properties":{"author":{"type":"keyword"}}}`)})
+		if err != nil {
+			return fmt.Errorf("opensearch: update mapping: %w", err)
+		}
 		return nil
 	}
 	if res != nil && res.StatusCode != http.StatusNotFound {
@@ -166,6 +172,27 @@ func (ix *Index) Search(ctx context.Context, q domain.Query) (*domain.Results, e
 			"fields": map[string]any{"body": map[string]any{"fragment_size": 140, "number_of_fragments": 1}, "title": map[string]any{"number_of_fragments": 0}},
 		},
 	}
+	if len(q.Authors) > 0 {
+		filter = append(filter, map[string]any{"terms": map[string]any{"author": q.Authors}})
+	}
+	if len(q.Parents) > 0 {
+		// A Space filter matches items in its Lists and the Space itself.
+		filter = append(filter, map[string]any{"bool": map[string]any{"minimum_should_match": 1, "should": []any{
+			map[string]any{"terms": map[string]any{"parent": q.Parents}},
+			map[string]any{"terms": map[string]any{"entity_id": q.Parents}},
+		}}})
+	}
+	if q.From != nil || q.To != nil {
+		rng := map[string]any{}
+		if q.From != nil {
+			rng["gte"] = q.From.Format(time.RFC3339)
+		}
+		if q.To != nil {
+			rng["lt"] = q.To.Format(time.RFC3339)
+		}
+		filter = append(filter, map[string]any{"range": map[string]any{"updated_at": rng}})
+	}
+	body["query"] = map[string]any{"bool": map[string]any{"filter": filter, "must": []any{match}}}
 	if len(q.Types) > 0 {
 		body["post_filter"] = map[string]any{"terms": map[string]any{"type": q.Types}}
 	}
@@ -187,7 +214,9 @@ func (ix *Index) Search(ctx context.Context, q domain.Query) (*domain.Results, e
 		if s := h.Highlight["body"]; len(s) > 0 {
 			hit.Snippet = s[0]
 		}
-		hit.Body = "" // the snippet is enough; don't ship whole documents
+		if !q.WithBody {
+			hit.Body = "" // the snippet is enough; don't ship whole documents
+		}
 		out.Hits = append(out.Hits, hit)
 	}
 	var aggs struct {

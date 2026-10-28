@@ -36,7 +36,21 @@ var (
 	ErrTooLarge           = apperror.Invalid("too_large", "content is too large")
 )
 
+// Update is one stored Yjs change to a doc.
+type Update struct {
+	Seq  int64
+	Data []byte
+}
+
+// CollabRepository stores live co-editing history.
+type CollabRepository interface {
+	AppendUpdate(ctx context.Context, docID string, data []byte) (int64, error)
+	Updates(ctx context.Context, docID string) ([]Update, error)
+	Compact(ctx context.Context, docID string, upTo int64, snapshot []byte) error
+}
+
 type Repository interface {
+	CollabRepository
 	CreateDoc(ctx context.Context, d *Doc) error
 	GetDoc(ctx context.Context, ws, id string) (*Doc, error)
 	ListDocs(ctx context.Context, ws string) ([]Doc, error)

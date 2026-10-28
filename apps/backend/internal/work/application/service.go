@@ -21,14 +21,16 @@ type Service struct {
 	names   UserNames
 	log     *zap.Logger
 	now     func() time.Time
+	triager Triager // optional: powers the "AI triage" automation action
 }
 
 func NewService(repo domain.Repository, pub Publisher, notify Notifier, members Members, keys KeyAllocator, names UserNames, log *zap.Logger) *Service {
 	return &Service{repo: repo, pub: pub, notify: notify, members: members, keys: keys, names: names, log: log, now: time.Now}
 }
 
+// emit publishes a change to everyone who can see the Space it belongs to.
 func (s *Service) emit(ctx context.Context, ws, collection, op string, v any) {
-	s.pub.Publish(ctx, ws, collection, op, v, nil)
+	s.pub.Publish(ctx, ws, collection, op, v, s.audience(ctx, ws, v))
 }
 
 func (s *Service) deleted(ctx context.Context, ws, collection, id string) {

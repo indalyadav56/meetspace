@@ -12,6 +12,7 @@ import QuickActions from './QuickActions'
 import { useCall } from './calls/useCall'
 import { useCreateTask } from './task/CreateTaskModal'
 import AccountMenu, { liveStatus } from './AccountMenu'
+import NotificationFeed from './notifications/NotificationFeed'
 import { isMuted, usePersonal } from './personal'
 
 export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
@@ -30,6 +31,7 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
   const unread = useStore((s) => s.notifications.filter((n) => !n.read && !n.cleared).length)
   const nav = useNavigate()
   const userMenu = usePopover()
+  const bellMenu = usePopover()
   const newMenu = usePopover()
   const aiMenu = usePopover()
   const aiOpen = useAssistant((s) => s.open)
@@ -127,10 +129,13 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
         </MenuItem>
       </Popover>
 
-      <Link to="/app/inbox" className="hover-surface text-muted relative rounded-md p-1.5" aria-label={muted ? 'Inbox (notifications muted)' : 'Inbox'} title={muted ? 'Notifications are muted' : undefined}>
+      <button onClick={bellMenu.toggle} aria-expanded={bellMenu.open} className={cn('hover-surface text-muted relative rounded-md p-1.5', bellMenu.open && 'bg-[var(--bg-hover)] text-app')} aria-label={muted ? 'Notifications (muted)' : unread ? `Notifications, ${unread} unread` : 'Notifications'} title={muted ? 'Notifications are muted' : 'Notifications'}>
         {muted ? <BellOff size={18} className="text-amber-500" /> : <Bell size={18} />}
-        {unread > 0 && !muted && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />}
-      </Link>
+        {unread > 0 && !muted && <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-red-500 px-1 text-center text-[10px] leading-4 font-bold text-white ring-2 ring-[var(--bg)]">{unread > 99 ? '99+' : unread}</span>}
+      </button>
+      <Popover open={bellMenu.open} anchor={bellMenu.anchor} onClose={bellMenu.close} align="end" width={400}>
+        <NotificationFeed compact onNavigate={bellMenu.close} />
+      </Popover>
 
       <button onClick={userMenu.toggle} className="relative rounded-full" aria-label="Account menu" title={myStatus ? `${myStatus.emoji} ${myStatus.text}`.trim() : undefined}>
         <Avatar userId={me.id} size={28} />

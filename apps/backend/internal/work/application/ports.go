@@ -18,6 +18,8 @@ type Members interface {
 	MemberIDs(ctx context.Context, workspaceID string) ([]string, error)
 	// CanManage reports whether the user is an owner or admin (e.g. may approve timesheets).
 	CanManage(ctx context.Context, workspaceID, userID string) (bool, error)
+	// Roles maps every member to their role (owner, admin, member, guest).
+	Roles(ctx context.Context, workspaceID string) (map[string]string, error)
 }
 
 // KeyAllocator reserves human-readable task numbers.

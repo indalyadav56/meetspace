@@ -63,6 +63,94 @@ func (s *Service) State(ctx context.Context, ws string) (*State, error) {
 	return &st, nil
 }
 
+// filterState drops every Space in hidden and everything inside it.
+func filterState(st *State, hidden map[string]bool) {
+	var projects []domain.Project
+	for _, p := range st.Projects {
+		if !hidden[p.ID] {
+			projects = append(projects, p)
+		}
+	}
+	st.Projects = projects
+	var folders []domain.Folder
+	for _, f := range st.Folders {
+		if !hidden[f.ProjectID] {
+			folders = append(folders, f)
+		}
+	}
+	st.Folders = folders
+
+	visibleList := map[string]bool{}
+	var lists []domain.List
+	for _, l := range st.Lists {
+		if !hidden[l.ProjectID] {
+			visibleList[l.ID] = true
+			lists = append(lists, l)
+		}
+	}
+	st.Lists = lists
+
+	visibleTask := map[string]bool{}
+	var tasks []domain.Task
+	for _, t := range st.Tasks {
+		if visibleList[t.ListID] {
+			visibleTask[t.ID] = true
+			tasks = append(tasks, t)
+		}
+	}
+	st.Tasks = tasks
+
+	var comments []domain.Comment
+	for _, c := range st.Comments {
+		if visibleTask[c.TaskID] {
+			comments = append(comments, c)
+		}
+	}
+	st.Comments = comments
+	var activity []domain.Activity
+	for _, a := range st.Activity {
+		if visibleTask[a.TaskID] {
+			activity = append(activity, a)
+		}
+	}
+	st.Activity = activity
+	var entries []domain.TimeEntry
+	for _, e := range st.TimeEntries {
+		if visibleTask[e.TaskID] {
+			entries = append(entries, e)
+		}
+	}
+	st.TimeEntries = entries
+	var fields []domain.CustomField
+	for _, f := range st.Fields {
+		if visibleList[f.ListID] {
+			fields = append(fields, f)
+		}
+	}
+	st.Fields = fields
+	var sprints []domain.Sprint
+	for _, sp := range st.Sprints {
+		if !hidden[sp.ProjectID] {
+			sprints = append(sprints, sp)
+		}
+	}
+	st.Sprints = sprints
+	var autos []domain.Automation
+	for _, a := range st.Automations {
+		if !hidden[a.ProjectID] {
+			autos = append(autos, a)
+		}
+	}
+	st.Automations = autos
+	var forms []domain.Form
+	for _, f := range st.Forms {
+		if visibleList[f.ListID] {
+			forms = append(forms, f)
+		}
+	}
+	st.Forms = forms
+}
+
 func nonNil[T any](xs []T) []T {
 	if xs == nil {
 		return []T{}
@@ -83,6 +171,13 @@ func (s *Service) Snapshot(ctx context.Context, ws, userID string) (map[string]a
 	sheets, err := s.repo.ListTimesheets(ctx, ws)
 	if err != nil {
 		return nil, err
+	}
+	hidden, err := s.HiddenProjects(ctx, ws, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(hidden) > 0 {
+		filterState(st, hidden)
 	}
 	return map[string]any{
 		"projects":    nonNil(st.Projects),
@@ -121,4 +216,79 @@ func (s *Service) AttachClip(ctx context.Context, ws, taskID, clipID string) err
 	}
 	s.emit(ctx, ws, "tasks", "upsert", t)
 	return nil
+}
+
+// PublicList is a read-only view of one List for a share link: tasks, statuses
+// and people's names, but no emails, comments or activity.
+func (s *Service) PublicList(ctx context.Context, ws, id string) (map[string]any, error) {
+	l, err := s.repo.GetList(ctx, ws, id)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.repo.GetProject(ctx, ws, l.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	all, err := s.repo.ListTasks(ctx, ws)
+	if err != nil {
+		return nil, err
+	}
+	people := map[string]string{}
+	tasks := []map[string]any{}
+	for _, t := range all {
+		if t.ListID != l.ID {
+			continue
+		}
+		for _, a := range t.Assignees {
+			if _, ok := people[a]; !ok {
+				people[a] = s.names.DisplayName(ctx, a)
+			}
+		}
+		tasks = append(tasks, map[string]any{
+			"id": t.ID, "key": t.Key, "title": t.Title, "statusId": t.StatusID, "priority": t.Priority, "assignees": t.Assignees,
+			"tags": t.Tags, "startDate": t.StartDate, "dueDate": t.DueDate, "points": t.Points, "parentId": t.ParentID, "issueType": t.IssueType,
+		})
+	}
+	return map[string]any{"title": l.Name, "space": p.Name, "color": p.Color, "statuses": p.Statuses, "tasks": tasks, "people": people}, nil
+}
+
+// AssignedOpen lists the user's unfinished tasks that have a due date, in
+// Spaces they can see, with each task's List name.
+func (s *Service) AssignedOpen(ctx context.Context, ws, user string) ([]domain.Task, map[string]string, error) {
+	hidden, err := s.HiddenProjects(ctx, ws, user)
+	if err != nil {
+		return nil, nil, err
+	}
+	projects, err := s.repo.ListProjects(ctx, ws)
+	if err != nil {
+		return nil, nil, err
+	}
+	lists, err := s.repo.ListLists(ctx, ws)
+	if err != nil {
+		return nil, nil, err
+	}
+	all, err := s.repo.ListTasks(ctx, ws)
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := map[string]domain.Project{}
+	for _, p := range projects {
+		byID[p.ID] = p
+	}
+	listName, listProj := map[string]string{}, map[string]string{}
+	for _, l := range lists {
+		listName[l.ID], listProj[l.ID] = l.Name, l.ProjectID
+	}
+	var out []domain.Task
+	for _, t := range all {
+		pid := listProj[t.ListID]
+		if t.DueDate == nil || hidden[pid] || !contains(t.Assignees, user) {
+			continue
+		}
+		if st, ok := byID[pid].Status(t.StatusID); ok && st.Finished() {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out, listName, nil
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { ChevronRight, Folder as FolderIcon, LayoutTemplate, Layers, List as ListIcon, MoreHorizontal, Plus, Star } from 'lucide-react'
+import { ChevronRight, Folder as FolderIcon, LayoutTemplate, Layers, List as ListIcon, Lock, Map as MapIcon, MoreHorizontal, Plus, Star } from 'lucide-react'
 import { TemplatePicker } from './components/Dialogs'
 import { useStore } from '../store/useStore'
 import type { ID } from '../store/types'
@@ -98,6 +98,9 @@ export function ProjectsSidebar() {
         <NavLink to="/app/everything" className={rowCls}>
           <Layers size={15} className="text-muted" /> Everything
         </NavLink>
+        <NavLink to="/app/roadmap" className={rowCls}>
+          <MapIcon size={15} className="text-muted" /> Roadmap
+        </NavLink>
 
         {s.spaces.map((sp) => {
           const folders = s.folders.filter((f) => f.spaceId === sp.id)
@@ -117,6 +120,7 @@ export function ProjectsSidebar() {
                 </button>
                 <SpaceBadge name={sp.name} color={sp.color} />
                 <span className="truncate">{sp.name}</span>
+                {sp.private && <Lock size={11} className="text-faint shrink-0" aria-label="Private" />}
                 <ItemMenu
                   onRename={() => {
                     const n = prompt('Rename space', sp.name)

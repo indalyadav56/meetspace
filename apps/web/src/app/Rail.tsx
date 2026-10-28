@@ -5,6 +5,7 @@ import { Popover, usePopover } from './components/ui'
 import { InviteDialog, UpgradeDialog } from './RailActions'
 import { useStore } from '../store/useStore'
 import { useUnreadChat } from './pages/ChatPage'
+import { useInbox } from './inbox/items'
 import { cn } from '../lib/utils'
 
 // The rail shows the everyday tools; the rest live under "More".
@@ -54,7 +55,8 @@ const itemClass = (active: boolean, mobile: boolean) =>
   cn('group relative flex w-14 shrink-0 flex-col items-center gap-0.5 rounded-lg py-1 text-[10px] font-medium', mobile ? 'text-white/70' : 'text-muted', active && (mobile ? 'text-white' : 'text-app'))
 
 export default function Rail({ mobile = false }: { mobile?: boolean }) {
-  const unread = useStore((s) => s.notifications.filter((n) => !n.read && !n.cleared).length)
+  // The Inbox badge counts to-dos; unread notifications live on the bell.
+  const unread = useInbox().todo.length
   const chatUnread = [...useUnreadChat().values()].reduce((a, b) => a + b, 0)
   const liveCalls = useStore((s) => s.callLogs.filter((c) => !c.endedAt && c.liveParticipants?.length).length)
   const badge = (label: string) => (label === 'Inbox' ? unread : label === 'Chat' ? chatUnread : 0)

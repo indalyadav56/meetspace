@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/indalyadav56/meetspace/backend/internal/assistant/domain"
@@ -17,6 +18,13 @@ type AgentInput struct {
 	Icon         string `json:"icon"`
 	Kind         string `json:"kind"`    // "agent" (default) or "skill"; fixed once created
 	Enabled      *bool  `json:"enabled"` // skills can be switched off without deleting them
+	// Scheduled runs (agents only).
+	Schedule       string  `json:"schedule"`
+	ScheduleTime   string  `json:"scheduleTime"`
+	ScheduleDay    int     `json:"scheduleDay"`
+	Timezone       string  `json:"timezone"`
+	SchedulePrompt string  `json:"schedulePrompt"`
+	ChannelID      *string `json:"channelId"`
 }
 
 func (in *AgentInput) clean() error {
@@ -30,7 +38,7 @@ func (in *AgentInput) clean() error {
 	if in.Kind != domain.KindSkill {
 		in.Kind = domain.KindAgent
 	}
-	return nil
+	return in.cleanSchedule()
 }
 
 func (s *Service) Agents(ctx context.Context, ws string) ([]domain.Agent, error) {
@@ -44,6 +52,12 @@ func (s *Service) CreateAgent(ctx context.Context, ws, userID string, in AgentIn
 	a := &domain.Agent{ID: in.ID, WorkspaceID: ws, Name: in.Name, Description: in.Description, Instructions: in.Instructions, Icon: in.Icon, Kind: in.Kind, Enabled: in.Enabled == nil || *in.Enabled, CreatedBy: &userID}
 	if err := s.agents.Create(ctx, a); err != nil {
 		return nil, err
+	}
+	if in.Kind == domain.KindAgent && in.Schedule != "" && in.Schedule != "none" {
+		applySchedule(a, in, time.Now())
+		if err := s.agents.Update(ctx, a); err != nil {
+			return nil, err
+		}
 	}
 	return a, nil
 }
@@ -59,6 +73,9 @@ func (s *Service) UpdateAgent(ctx context.Context, ws, id string, in AgentInput)
 	a.Name, a.Description, a.Instructions, a.Icon = in.Name, in.Description, in.Instructions, in.Icon
 	if in.Enabled != nil {
 		a.Enabled = *in.Enabled
+	}
+	if a.Kind == domain.KindAgent && in.Schedule != "" {
+		applySchedule(a, in, time.Now())
 	}
 	if err := s.agents.Update(ctx, a); err != nil {
 		return nil, err

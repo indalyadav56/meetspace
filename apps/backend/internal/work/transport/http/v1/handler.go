@@ -3,6 +3,7 @@ package v1
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,9 @@ import (
 type Handler struct {
 	svc      *application.Service
 	mentions application.MentionResolver
+	// email-to-task, set by WithInbound
+	inboundDomain, inboundSecret string
+	lookup                       application.UserLookup
 }
 
 func NewHandler(svc *application.Service, mentions application.MentionResolver) *Handler {
@@ -124,6 +128,10 @@ func (h *Handler) deleteProject(c *gin.Context) {
 
 func (h *Handler) createFolder(c *gin.Context) {
 	if r, ok := bind[folderReq](c); ok {
+		if err := h.svc.CanAccess(c.Request.Context(), ws(c), actor(c), "project", r.ProjectID); err != nil {
+			response.FromError(c, err)
+			return
+		}
 		f, err := h.svc.CreateFolder(c.Request.Context(), ws(c), r.ID, r.ProjectID, r.Name)
 		respond(c, http.StatusCreated, f, err)
 	}
@@ -142,6 +150,10 @@ func (h *Handler) deleteFolder(c *gin.Context) {
 
 func (h *Handler) createList(c *gin.Context) {
 	if r, ok := bind[listReq](c); ok {
+		if err := h.svc.CanAccess(c.Request.Context(), ws(c), actor(c), "project", r.ProjectID); err != nil {
+			response.FromError(c, err)
+			return
+		}
 		l, err := h.svc.CreateList(c.Request.Context(), ws(c), r.ID, r.ProjectID, r.FolderID, r.Name)
 		respond(c, http.StatusCreated, l, err)
 	}
@@ -160,6 +172,10 @@ func (h *Handler) deleteList(c *gin.Context) {
 
 func (h *Handler) listFromTemplate(c *gin.Context) {
 	if r, ok := bind[templateReq](c); ok {
+		if err := h.svc.CanAccess(c.Request.Context(), ws(c), actor(c), "project", r.ProjectID); err != nil {
+			response.FromError(c, err)
+			return
+		}
 		l, err := h.svc.ApplyTemplate(c.Request.Context(), ws(c), actor(c), r.ID, r.ProjectID, r.Template, r.Name)
 		respond(c, http.StatusCreated, l, err)
 	}
@@ -193,6 +209,10 @@ type importReq struct {
 
 func (h *Handler) createTask(c *gin.Context) {
 	if r, ok := bind[application.TaskInput](c); ok {
+		if err := h.svc.CanAccess(c.Request.Context(), ws(c), actor(c), "list", r.ListID); err != nil {
+			response.FromError(c, err)
+			return
+		}
 		t, err := h.svc.CreateTask(c.Request.Context(), ws(c), actor(c), r)
 		respond(c, http.StatusCreated, t, err)
 	}
@@ -487,7 +507,40 @@ func (h *Handler) submitForm(c *gin.Context) {
 }
 
 // Register mounts authenticated routes on /workspaces/:wid.
+// guard hides items in Spaces the caller can't see, on every route that names one by id.
+func (h *Handler) guard(c *gin.Context) {
+	path := c.FullPath()
+	for _, k := range []struct{ prefix, kind string }{{"/tasks/:id", "task"}, {"/lists/:id", "list"}, {"/folders/:id", "folder"}, {"/projects/:id", "project"}} {
+		if strings.Contains(path, k.prefix) {
+			if err := h.svc.CanAccess(c.Request.Context(), ws(c), actor(c), k.kind, c.Param("id")); err != nil {
+				response.FromError(c, err)
+				c.Abort()
+				return
+			}
+			break
+		}
+	}
+	c.Next()
+}
+
+type accessReq struct {
+	Private bool     `json:"private"`
+	Members []string `json:"members"`
+}
+
+func (h *Handler) setAccess(c *gin.Context) {
+	if r, ok := bind[accessReq](c); ok {
+		p, err := h.svc.SetProjectAccess(c.Request.Context(), ws(c), actor(c), c.Param("id"), r.Private, r.Members)
+		respond(c, http.StatusOK, p, err)
+	}
+}
+
 func (h *Handler) Register(rg *gin.RouterGroup) {
+	rg.Use(h.guard)
+	rg.PUT("/projects/:id/access", h.setAccess)
+	rg.GET("/lists/:id/inbox", h.getInbox)
+	rg.POST("/lists/:id/inbox", h.enableInbox)
+	rg.DELETE("/lists/:id/inbox", h.disableInbox)
 	rg.POST("/projects", h.createProject)
 	rg.PATCH("/projects/:id", h.updateProject)
 	rg.DELETE("/projects/:id", h.deleteProject)
@@ -509,6 +562,7 @@ func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.PATCH("/tasks/:id", h.updateTask)
 	rg.DELETE("/tasks/:id", h.deleteTask)
 	rg.GET("/trash/tasks", h.listTrash)
+	rg.POST("/import", h.importFrom)
 	rg.POST("/tasks/:id/restore", h.restoreTask)
 	rg.DELETE("/tasks/:id/purge", h.purgeTask)
 	rg.POST("/tasks/:id/duplicate", h.duplicateTask)
@@ -589,5 +643,13 @@ func (h *Handler) reopenTimesheet(c *gin.Context) {
 	if r, ok := bind[reopenSheetReq](c); ok {
 		t, err := h.svc.ReopenTimesheet(c.Request.Context(), ws(c), actor(c), r.UserID, r.WeekStart)
 		respond(c, http.StatusOK, t, err)
+	}
+}
+
+// importFrom brings a whole project over from ClickUp, Jira, Trello or Asana.
+func (h *Handler) importFrom(c *gin.Context) {
+	if r, ok := bind[application.ImportInput](c); ok {
+		res, err := h.svc.Import(c.Request.Context(), ws(c), actor(c), r)
+		respond(c, http.StatusCreated, res, err)
 	}
 }

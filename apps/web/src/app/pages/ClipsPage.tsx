@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useQueryState } from '../../lib/useQueryState'
 import { format, parseISO } from 'date-fns'
-import { Camera, CheckSquare, Circle, Download, Film, Hash, LayoutGrid, List as ListIcon, Mic, Monitor, Search, Share2, Trash2, Video, X } from 'lucide-react'
+import { Camera, CheckSquare, Circle, Sparkles, Download, Film, Hash, LayoutGrid, List as ListIcon, Mic, Monitor, Search, Share2, Trash2, Video, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import { api } from '../../api/client'
 import type { Clip, ClipKind } from '../../store/types'
 import { Avatar, MenuItem, Modal, Popover, usePopover } from '../components/ui'
 import ClipPlayer, { formatDuration } from '../clips/ClipPlayer'
@@ -258,9 +259,96 @@ export function ClipDetail({ clip, onClose }: { clip: Clip; onClose: () => void 
           <div className="mt-4">
             <h3 className="mb-1 text-sm font-semibold">Transcript</h3>
             <pre className="surface-subtle max-h-48 overflow-y-auto rounded-lg p-3 font-sans text-xs whitespace-pre-wrap">{live.transcript}</pre>
+            <TranscriptSummary title={live.title} transcript={live.transcript} />
           </div>
         )}
       </div>
     </Modal>
+  )
+}
+
+interface Summary {
+  summary: string
+  decisions: string[]
+  actionItems: { title: string; owner: string; due: string }[]
+}
+
+/** AI notes from a transcript: summary, decisions, and action items that become tasks. */
+function TranscriptSummary({ title, transcript }: { title: string; transcript: string }) {
+  const s = useStore()
+  const [sum, setSum] = useState<Summary | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [picked, setPicked] = useState<boolean[]>([])
+  const [listId, setListId] = useState(s.lists[0]?.id ?? '')
+  const run = async () => {
+    setBusy(true)
+    try {
+      const r = await api.raw<Summary>('POST', `/workspaces/${s.currentWorkspaceId}/assistant/summarize`, { body: { title, transcript } })
+      setSum(r)
+      setPicked(r.actionItems.map(() => true))
+    } catch (e) {
+      s.toast(e instanceof Error ? e.message : 'Could not summarize', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const ownerId = (name: string) => s.users.find((u) => name && (u.name.toLowerCase() === name.toLowerCase() || u.name.split(' ')[0].toLowerCase() === name.toLowerCase().split(' ')[0]))?.id
+  const create = () => {
+    if (!sum || !listId) return
+    let n = 0
+    sum.actionItems.forEach((a, i) => {
+      if (!picked[i]) return
+      const owner = ownerId(a.owner)
+      s.addTask({ listId, title: a.title, assignees: owner ? [owner] : [], dueDate: /^\d{4}-\d{2}-\d{2}$/.test(a.due) ? a.due : null, tags: ['meeting'] })
+      n++
+    })
+    s.toast(`Created ${n} task${n === 1 ? '' : 's'} from the meeting`)
+    setPicked((p) => p.map(() => false))
+  }
+  if (!sum)
+    return (
+      <button onClick={() => void run()} disabled={busy} className="border-app hover-surface mt-2 inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium disabled:opacity-50">
+        <Sparkles size={13} className="text-accent-500" /> {busy ? 'Summarizing…' : 'Summarize with AI'}
+      </button>
+    )
+  return (
+    <div className="border-app mt-3 space-y-3 rounded-lg border p-3 text-sm">
+      <p>{sum.summary}</p>
+      {sum.decisions.length > 0 && (
+        <div>
+          <div className="text-faint mb-1 text-[11px] font-semibold uppercase">Decisions</div>
+          <ul className="list-disc space-y-0.5 pl-5">
+            {sum.decisions.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {sum.actionItems.length > 0 && (
+        <div>
+          <div className="text-faint mb-1 text-[11px] font-semibold uppercase">Action items</div>
+          {sum.actionItems.map((a, i) => (
+            <label key={i} className="flex items-center gap-2 py-0.5">
+              <input type="checkbox" checked={!!picked[i]} onChange={() => setPicked((p) => p.map((v, j) => (j === i ? !v : v)))} className="accent-brand-600" />
+              <span className="flex-1">{a.title}</span>
+              {a.owner && <span className="text-faint text-xs">{ownerId(a.owner) ? '' : '?'}{a.owner}</span>}
+              {a.due && <span className="text-faint text-xs">{a.due}</span>}
+            </label>
+          ))}
+          <div className="mt-2 flex items-center gap-2">
+            <select value={listId} onChange={(e) => setListId(e.target.value)} className="border-app surface h-7 rounded-md border px-1.5 text-xs" aria-label="List for tasks">
+              {s.lists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+            <button onClick={create} disabled={!picked.some(Boolean)} className="bg-brand-600 hover:bg-brand-700 rounded-md px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-40">
+              Create {picked.filter(Boolean).length} task{picked.filter(Boolean).length === 1 ? '' : 's'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

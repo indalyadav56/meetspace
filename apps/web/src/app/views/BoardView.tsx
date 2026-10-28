@@ -42,12 +42,13 @@ import { useTaskResolver } from '../hooks'
 import { Avatar, AvatarStack, MenuItem, Popover, PriorityFlag, StatusPill, Tag, usePopover } from '../components/ui'
 import { PRIORITIES, cn, friendlyDate } from '../../lib/utils'
 import { useCreateTask, type CreateTaskDefaults } from '../task/CreateTaskModal'
+import { EpicChip, IssueIcon, epicColor } from '../components/issue'
 import type { ViewProps } from './ListView'
 
 /* ───────────────────────── preferences ───────────────────────── */
 
 type ColBy = 'status' | 'assignee' | 'priority'
-type LaneBy = 'none' | 'assignee' | 'priority' | 'list'
+type LaneBy = 'none' | 'assignee' | 'priority' | 'list' | 'epic'
 type Field = 'key' | 'location' | 'tags' | 'progress' | 'due' | 'priority' | 'points' | 'assignees' | 'counts'
 const FIELD_LABELS: Record<Field, string> = {
   key: 'Task ID',
@@ -61,7 +62,7 @@ const FIELD_LABELS: Record<Field, string> = {
   counts: 'Subtasks, comments & clips',
 }
 const COL_LABELS: Record<ColBy, string> = { status: 'Status', assignee: 'Assignee', priority: 'Priority' }
-const LANE_LABELS: Record<LaneBy, string> = { none: 'None', assignee: 'Assignee', priority: 'Priority', list: 'List' }
+const LANE_LABELS: Record<LaneBy, string> = { none: 'None', assignee: 'Assignee', priority: 'Priority', list: 'List', epic: 'Epic' }
 
 interface BoardPrefs {
   colBy: ColBy
@@ -173,6 +174,16 @@ export default function BoardView({ tasks, statuses, defaultListId, mixed, viewK
     if (by === 'status') return statuses.map((st) => ({ key: st.id, name: st.name, color: st.color }))
     if (by === 'assignee') return userGroups
     if (by === 'priority') return PRIORITY_GROUPS
+    if (by === 'epic') {
+      const ids = [...new Set(tasks.map((t) => t.epicId).filter((x): x is string => !!x))]
+      return [
+        ...ids.map((id) => {
+          const e = s.tasks.find((t) => t.id === id)
+          return { key: id, name: e ? e.title : 'Deleted epic', color: epicColor(id), icon: <IssueIcon type="epic" size={16} /> }
+        }),
+        { key: NONE, name: 'No epic', color: '#94a3b8' },
+      ]
+    }
     if (by === 'list') {
       const ids = [...new Set(tasks.map((t) => t.listId))]
       return ids.map((id) => {
@@ -189,6 +200,7 @@ export default function BoardView({ tasks, statuses, defaultListId, mixed, viewK
     if (by === 'assignee') return t.assignees.length ? (single ? [t.assignees[0]] : t.assignees) : [NONE]
     if (by === 'priority') return [t.priority ?? NONE]
     if (by === 'list') return [t.listId]
+    if (by === 'epic') return [t.epicId ?? NONE]
     return ['_']
   }
 
@@ -229,6 +241,7 @@ export default function BoardView({ tasks, statuses, defaultListId, mixed, viewK
       return { assignees: to === NONE ? rest : [...new Set([...rest, to])] }
     }
     if (by === 'priority') return { priority: to === NONE ? null : (to as Priority) }
+    if (by === 'epic') return t.issueType === 'epic' ? null : { epicId: to === NONE ? null : to }
     if (by === 'list') {
       const sameSpace = s.lists.find((l) => l.id === to)?.spaceId === s.lists.find((l) => l.id === t.listId)?.spaceId
       if (!sameSpace) {
@@ -270,6 +283,7 @@ export default function BoardView({ tasks, statuses, defaultListId, mixed, viewK
       if (by === 'assignee' && key !== NONE) d.assignees = [key]
       if (by === 'priority' && key !== NONE) d.priority = key as Priority
       if (by === 'list') d.listId = key
+      if (by === 'epic' && key !== NONE) d.epicId = key
     }
     apply(prefs.colBy, col)
     apply(lanesBy, lane)
@@ -620,6 +634,7 @@ function Card({ task: shown, prefs, progress, showStatus, overlay }: { task: Tas
     >
       {(f('key') || f('location')) && (
         <div className="text-faint mb-1 flex min-w-0 items-center gap-1.5 pr-12 text-[11px]">
+          <IssueIcon type={task.issueType} size={13} />
           {f('key') && <span className="shrink-0 font-mono font-medium">MS-{task.key}</span>}
           {f('key') && f('location') && <span>·</span>}
           {f('location') && (
@@ -633,6 +648,11 @@ function Card({ task: shown, prefs, progress, showStatus, overlay }: { task: Tas
       <div className="flex items-start gap-2">
         <span className={cn('line-clamp-3 font-medium leading-snug', done && 'text-faint line-through')}>{task.title}</span>
       </div>
+      {task.epicId && task.issueType !== 'epic' && f('location') && (
+        <div className="mt-1.5">
+          <EpicChip epicId={task.epicId} />
+        </div>
+      )}
       {showStatus && (
         <div className="mt-1.5">
           <StatusPill status={r.statusOf(task)} size="xs" />

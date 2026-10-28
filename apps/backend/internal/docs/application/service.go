@@ -22,6 +22,13 @@ type Publisher interface {
 type Service struct {
 	repo domain.Repository
 	pub  Publisher
+	// hidden reports the Spaces a person can't see; docs in them are left out.
+	hidden func(ctx context.Context, ws, user string) (map[string]bool, error)
+}
+
+// HideSpaces lets the work context say which Spaces are private to a person.
+func (s *Service) HideSpaces(fn func(ctx context.Context, ws, user string) (map[string]bool, error)) {
+	s.hidden = fn
 }
 
 func NewService(repo domain.Repository, pub Publisher) *Service {
@@ -100,6 +107,10 @@ func (s *Service) ListDocs(ctx context.Context, ws string) ([]domain.Doc, error)
 
 func (s *Service) GetDoc(ctx context.Context, ws, id string) (*domain.Doc, error) {
 	return s.repo.GetDoc(ctx, ws, id)
+}
+
+func (s *Service) GetWhiteboard(ctx context.Context, ws, id string) (*domain.Whiteboard, error) {
+	return s.repo.GetWhiteboard(ctx, ws, id)
 }
 
 func (s *Service) CreateWhiteboard(ctx context.Context, ws, actorID, id, title string) (*domain.Whiteboard, error) {
@@ -191,10 +202,25 @@ func (s *Service) Purge(ctx context.Context, ws, kind, id string) error {
 	return s.repo.Purge(ctx, ws, kind, id)
 }
 
-func (s *Service) Snapshot(ctx context.Context, ws, _ string) (map[string]any, error) {
+func (s *Service) Snapshot(ctx context.Context, ws, user string) (map[string]any, error) {
 	docs, err := s.repo.ListDocs(ctx, ws)
 	if err != nil {
 		return nil, err
+	}
+	if s.hidden != nil {
+		hidden, err := s.hidden(ctx, ws, user)
+		if err != nil {
+			return nil, err
+		}
+		if len(hidden) > 0 {
+			kept := docs[:0]
+			for _, d := range docs {
+				if d.ProjectID == nil || !hidden[*d.ProjectID] {
+					kept = append(kept, d)
+				}
+			}
+			docs = kept
+		}
 	}
 	wbs, err := s.repo.ListWhiteboards(ctx, ws)
 	if err != nil {

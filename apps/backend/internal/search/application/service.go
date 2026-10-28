@@ -15,6 +15,13 @@ import (
 type Service struct {
 	index domain.Index // nil when search isn't configured
 	log   *zap.Logger
+	// hidden lists ids (Spaces, Lists, tasks…) a person can't see; their results are dropped.
+	hidden func(ctx context.Context, ws, user string) (map[string]bool, error)
+}
+
+// HideItems lets the work context drop results from private Spaces.
+func (s *Service) HideItems(fn func(ctx context.Context, ws, user string) (map[string]bool, error)) {
+	s.hidden = fn
 }
 
 func NewService(index domain.Index, log *zap.Logger) *Service {
@@ -38,7 +45,27 @@ func (s *Service) Search(ctx context.Context, q domain.Query) (*domain.Results, 
 	if q.Sort != "recent" {
 		q.Sort = "relevance"
 	}
-	return s.index.Search(ctx, q)
+	res, err := s.index.Search(ctx, q)
+	if err != nil || s.hidden == nil {
+		return res, err
+	}
+	hidden, err := s.hidden(ctx, q.WorkspaceID, q.UserID)
+	if err != nil || len(hidden) == 0 {
+		return res, err
+	}
+	kept := res.Hits[:0]
+	for _, h := range res.Hits {
+		if hidden[h.EntityID] || hidden[h.Parent] {
+			res.Total--
+			if res.Counts[h.Type] > 0 {
+				res.Counts[h.Type]--
+			}
+			continue
+		}
+		kept = append(kept, h)
+	}
+	res.Hits = kept
+	return res, nil
 }
 
 // Apply indexes one change (an upsert or delete from another context).

@@ -17,6 +17,16 @@ export interface SavedAgent {
   kind?: 'agent' | 'skill'
   enabled?: boolean
   createdBy?: string | null
+  /** Runs by itself: none, daily, weekdays or weekly (on scheduleDay, 0=Sunday). */
+  schedule?: 'none' | 'daily' | 'weekdays' | 'weekly'
+  scheduleTime?: string
+  scheduleDay?: number
+  timezone?: string
+  schedulePrompt?: string
+  channelId?: string | null
+  nextRunAt?: string | null
+  lastRunAt?: string | null
+  lastResult?: string
 }
 
 export interface ChatItem {

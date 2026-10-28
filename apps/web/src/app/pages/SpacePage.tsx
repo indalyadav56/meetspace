@@ -9,6 +9,7 @@ import { SPACE_COLORS, cn } from '../../lib/utils'
 import { useQueryState } from '../../lib/useQueryState'
 import SpaceOverview from './SpaceOverview'
 import DetailsBar from '../components/DetailsBar'
+import { SpaceAccessButton } from '../components/ShareDialog'
 
 export default function SpacePage() {
   const { spaceId = '' } = useParams()
@@ -36,6 +37,7 @@ export default function SpacePage() {
             <button key={c} onClick={() => s.updateSpace(spaceId, { color: c })} className={cn('h-4 w-4 rounded-full', c === space.color && 'ring-2 ring-offset-1 ring-offset-[var(--bg)]')} style={{ background: c, ['--tw-ring-color' as string]: c }} aria-label={`Color ${c}`} />
           ))}
         </div>
+        <SpaceAccessButton spaceId={spaceId} />
         <div className="text-muted ml-auto flex items-center gap-3 text-xs">
           <span>
             {done}/{top.length} complete

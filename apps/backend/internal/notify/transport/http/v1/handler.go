@@ -12,9 +12,18 @@ import (
 	"github.com/indalyadav56/meetspace/backend/pkg/response"
 )
 
-type Handler struct{ svc *application.Service }
+type Handler struct {
+	svc      *application.Service
+	delivery *application.Delivery
+}
 
 func NewHandler(svc *application.Service) *Handler { return &Handler{svc: svc} }
+
+// WithDelivery adds the email and push settings endpoints.
+func (h *Handler) WithDelivery(d *application.Delivery) *Handler {
+	h.delivery = d
+	return h
+}
 
 type patchNotificationReq struct {
 	Read    *bool `json:"read"`

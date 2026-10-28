@@ -452,7 +452,7 @@ func (s *Service) CompleteSprint(ctx context.Context, ws, actorID, id string, mo
 
 var (
 	triggerTypes = map[string]bool{"status_changed": true, "task_created": true, "priority_changed": true, "assignee_added": true}
-	actionTypes  = map[string]bool{"set_status": true, "set_priority": true, "add_assignee": true, "add_tag": true, "add_comment": true, "set_due_in": true, "notify": true}
+	actionTypes  = map[string]bool{"set_status": true, "set_priority": true, "add_assignee": true, "add_tag": true, "add_comment": true, "set_due_in": true, "notify": true, "ai_triage": true}
 )
 
 func validateAutomation(a *domain.Automation) error {

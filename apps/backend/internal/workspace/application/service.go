@@ -83,6 +83,28 @@ func (s *Service) IsMember(ctx context.Context, workspaceID, userID string) (boo
 	return err == nil, err
 }
 
+// Roles maps each member to their role; other contexts use it for access rules.
+func (s *Service) Roles(ctx context.Context, workspaceID string) (map[string]string, error) {
+	w, err := s.repo.Get(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(w.Members))
+	for _, m := range w.Members {
+		out[m.UserID] = string(m.Role)
+	}
+	return out, nil
+}
+
+// Name returns the workspace's name, or "" when it can't be read.
+func (s *Service) Name(ctx context.Context, workspaceID string) string {
+	w, err := s.repo.Get(ctx, workspaceID)
+	if err != nil {
+		return ""
+	}
+	return w.Name
+}
+
 // MemberIDs lists user ids in a workspace (used for chat channels and notifications).
 func (s *Service) MemberIDs(ctx context.Context, workspaceID string) ([]string, error) {
 	w, err := s.repo.Get(ctx, workspaceID)

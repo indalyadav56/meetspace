@@ -24,6 +24,9 @@ import {
 } from 'lucide-react'
 import { useAssistant } from '../ai/useAssistant'
 import { format, parseISO } from 'date-fns'
+import { ShareButton } from '../components/ShareDialog'
+import { DocCollab, type CollabStatus } from '../docs/collab'
+import { ySyncPluginKey } from 'y-prosemirror'
 import { useStore } from '../../store/useStore'
 import type { Doc } from '../../store/types'
 import { Avatar, MenuItem, Popover, usePopover } from '../components/ui'
@@ -271,8 +274,57 @@ function DocsIndex() {
   )
 }
 
+/** Connects a Doc for live co-editing, falling back to solo editing when the server can't be reached. */
 function DocEditor({ doc }: { doc: Doc }) {
   const s = useStore()
+  const [collab, setCollab] = useState<DocCollab | null>(null)
+  const [solo, setSolo] = useState(false)
+  const [live, setLive] = useState<{ status: CollabStatus; peers: number }>({ status: 'connecting', peers: 0 })
+  const editorRef = useRef<Editor | null>(null)
+  // The server may ask us to seed the shared doc before our editor exists.
+  const pendingInit = useRef(false)
+  useEffect(() => {
+    let synced = false
+    const goSolo = () => (c.destroy(), setSolo(true))
+    const c = new DocCollab(
+      s.currentWorkspaceId!,
+      doc.id,
+      (status, peers) => {
+        if (status === 'live') synced = true
+        // Never reached the server: edit on your own rather than show an empty doc.
+        if (status === 'offline' && !synced) return goSolo()
+        setLive({ status, peers })
+      },
+      () => {
+        if (editorRef.current) editorRef.current.commands.setContent(doc.content || '')
+        else pendingInit.current = true
+      },
+    )
+    setCollab(c)
+    const giveUp = setTimeout(() => !synced && goSolo(), 6000)
+    return () => (clearTimeout(giveUp), c.destroy(), setCollab(null))
+  }, [doc.id]) // one connection per Doc
+  if (solo) return <DocEditorInner key={`${doc.id}-solo`} doc={doc} />
+  if (!collab) return null
+  return <DocEditorInner key={doc.id} doc={doc} collab={collab} live={live} editorRef={editorRef} pendingInit={pendingInit} />
+}
+
+function DocEditorInner({
+  doc,
+  collab,
+  live,
+  editorRef,
+  pendingInit,
+}: {
+  doc: Doc
+  collab?: DocCollab
+  live?: { status: CollabStatus; peers: number }
+  editorRef?: React.MutableRefObject<Editor | null>
+  pendingInit?: React.MutableRefObject<boolean>
+}) {
+  const s = useStore()
+  const meUser = s.users.find((u) => u.id === s.currentUserId)
+  const me = { name: meUser?.name ?? 'Someone', color: meUser?.color ?? '#6366f1' }
   const nav = useNavigate()
   const [saved, setSaved] = useState(true)
   const [notice, setNotice] = useState<string | null>(null)
@@ -285,8 +337,9 @@ function DocEditor({ doc }: { doc: Doc }) {
   }
 
   const editor = useEditor({
-    extensions: docExtensions('Type / for blocks, or just start writing…'),
-    content: doc.content,
+    extensions: docExtensions('Type / for blocks, or just start writing…', collab ? { doc: collab.doc, awareness: collab.awareness, user: { name: me.name, color: me.color } } : undefined),
+    // With co-editing the content comes from the shared Yjs doc instead.
+    content: collab ? undefined : doc.content,
     editorProps: {
       attributes: { class: 'prose-doc doc-editor' },
       handlePaste: (_view, e) => {
@@ -303,12 +356,25 @@ function DocEditor({ doc }: { doc: Doc }) {
         return true
       },
     },
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor, transaction }) => {
+      // Everyone gets everyone's changes through Yjs; only the person who typed
+      // saves the HTML copy used by search, export and share links.
+      if (transaction.getMeta(ySyncPluginKey)?.isChangeOrigin) return
       setSaved(false)
       s.updateDoc(doc.id, { content: editor.isEmpty ? '' : editor.getHTML() })
     },
   })
   ref.current = editor
+  if (editorRef) editorRef.current = editor
+  useEffect(() => {
+    if (editor && pendingInit?.current) {
+      pendingInit.current = false
+      editor.commands.setContent(doc.content || '')
+    }
+  }, [editor])
+  useEffect(() => {
+    collab?.setUser(me.name, me.color)
+  }, [collab, me.name, me.color])
 
   const emojiPop = usePopover()
   const morePop = usePopover()
@@ -371,6 +437,7 @@ function DocEditor({ doc }: { doc: Doc }) {
           <ArrowLeft size={16} />
         </Link>
         <span className="truncate text-sm font-medium">{title}</span>
+        {live && <LiveBadge collab={collab!} live={live} />}
         <span className={cn('shrink-0 text-xs', notice ? 'text-brand-600' : saved ? 'text-faint' : 'text-amber-500')}>{notice ?? (saved ? 'Saved' : 'Saving…')}</span>
         <div className="ml-auto flex items-center gap-1">
           <select
@@ -413,6 +480,7 @@ function DocEditor({ doc }: { doc: Doc }) {
           <button onClick={() => toggle('wide', !wide)} className="hover-surface text-muted hidden rounded p-1.5 md:block" aria-label={wide ? 'Normal width' : 'Full width'} title={wide ? 'Normal width' : 'Full width'}>
             {wide ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
+          <ShareButton kind="doc" id={doc.id} title={doc.title} spaceId={doc.spaceId} className="h-7" />
           <button onClick={() => s.toggleFavorite(doc.id)} className="hover-surface rounded p-1.5" aria-label="Favorite">
             <Star size={16} className={fav ? 'fill-amber-400 text-amber-400' : 'text-muted'} />
           </button>
@@ -498,5 +566,26 @@ function DocEditor({ doc }: { doc: Doc }) {
       <SlashMenu />
       <InsertDialogs />
     </div>
+  )
+}
+
+/** Who else is in the doc right now, and whether we're connected. */
+function LiveBadge({ collab, live }: { collab: DocCollab; live: { status: CollabStatus; peers: number } }) {
+  const others = [...collab.awareness.getStates().entries()].filter(([id, st]) => id !== collab.doc.clientID && st.user).map(([id, st]) => ({ id, ...(st.user as { name: string; color: string }) }))
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 text-xs" title={live.status === 'live' ? 'Changes sync live' : live.status === 'offline' ? 'Offline — your edits will sync when you reconnect' : 'Connecting…'}>
+      <span className={cn('h-2 w-2 rounded-full', live.status === 'live' ? 'bg-emerald-500' : live.status === 'offline' ? 'bg-amber-500' : 'animate-pulse bg-stone-400')} />
+      {others.length > 0 ? (
+        <span className="flex -space-x-1.5">
+          {others.slice(0, 4).map((o) => (
+            <span key={o.id} title={o.name} className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold text-white ring-2 ring-[var(--bg)]" style={{ background: o.color }}>
+              {o.name.split(' ').map((w) => w[0]).join('').slice(0, 2)}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="text-faint">{live.status === 'live' ? 'Live' : live.status === 'offline' ? 'Offline' : ''}</span>
+      )}
+    </span>
   )
 }

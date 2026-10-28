@@ -3,6 +3,7 @@ package di
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,8 +16,16 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
+	"github.com/indalyadav56/meetspace/backend/internal/config"
+	auditapp "github.com/indalyadav56/meetspace/backend/internal/audit/application"
+	calapp "github.com/indalyadav56/meetspace/backend/internal/calfeed/application"
+	calpg "github.com/indalyadav56/meetspace/backend/internal/calfeed/infrastructure/postgres"
+	calhttp "github.com/indalyadav56/meetspace/backend/internal/calfeed/transport/http/v1"
+	auditpg "github.com/indalyadav56/meetspace/backend/internal/audit/infrastructure/postgres"
+	audithttp "github.com/indalyadav56/meetspace/backend/internal/audit/transport/http/v1"
 	assistantapp "github.com/indalyadav56/meetspace/backend/internal/assistant/application"
 	"github.com/indalyadav56/meetspace/backend/internal/assistant/infrastructure/adk"
+	"github.com/indalyadav56/meetspace/backend/internal/assistant/infrastructure/gemini"
 	assistantpg "github.com/indalyadav56/meetspace/backend/internal/assistant/infrastructure/postgres"
 	assistanthttp "github.com/indalyadav56/meetspace/backend/internal/assistant/transport/http/v1"
 	chatapp "github.com/indalyadav56/meetspace/backend/internal/chat/application"
@@ -25,11 +34,13 @@ import (
 	docsapp "github.com/indalyadav56/meetspace/backend/internal/docs/application"
 	docspg "github.com/indalyadav56/meetspace/backend/internal/docs/infrastructure/postgres"
 	docshttp "github.com/indalyadav56/meetspace/backend/internal/docs/transport/http/v1"
+	docsws "github.com/indalyadav56/meetspace/backend/internal/docs/transport/ws"
 	goalsapp "github.com/indalyadav56/meetspace/backend/internal/goals/application"
 	goalspg "github.com/indalyadav56/meetspace/backend/internal/goals/infrastructure/postgres"
 	goalshttp "github.com/indalyadav56/meetspace/backend/internal/goals/transport/http/v1"
 	identityapp "github.com/indalyadav56/meetspace/backend/internal/identity/application"
 	"github.com/indalyadav56/meetspace/backend/internal/identity/infrastructure/email"
+	"github.com/indalyadav56/meetspace/backend/internal/identity/infrastructure/oidc"
 	identitypg "github.com/indalyadav56/meetspace/backend/internal/identity/infrastructure/postgres"
 	identityhttp "github.com/indalyadav56/meetspace/backend/internal/identity/transport/http/v1"
 	integrationsapp "github.com/indalyadav56/meetspace/backend/internal/integrations/application"
@@ -52,6 +63,10 @@ import (
 	realtimeredis "github.com/indalyadav56/meetspace/backend/internal/realtime/infrastructure/redis"
 	realtimews "github.com/indalyadav56/meetspace/backend/internal/realtime/transport/ws"
 	searchapp "github.com/indalyadav56/meetspace/backend/internal/search/application"
+	shareapp "github.com/indalyadav56/meetspace/backend/internal/share/application"
+	sharepg "github.com/indalyadav56/meetspace/backend/internal/share/infrastructure/postgres"
+	sharehttp "github.com/indalyadav56/meetspace/backend/internal/share/transport/http/v1"
+	searchpg "github.com/indalyadav56/meetspace/backend/internal/search/infrastructure/postgres"
 	searchhttp "github.com/indalyadav56/meetspace/backend/internal/search/transport/http/v1"
 	workapp "github.com/indalyadav56/meetspace/backend/internal/work/application"
 	workpg "github.com/indalyadav56/meetspace/backend/internal/work/infrastructure/postgres"
@@ -62,6 +77,7 @@ import (
 	"github.com/indalyadav56/meetspace/backend/pkg/jwt"
 	"github.com/indalyadav56/meetspace/backend/pkg/mailer"
 	"github.com/indalyadav56/meetspace/backend/pkg/password"
+	"github.com/indalyadav56/meetspace/backend/pkg/secretbox"
 )
 
 const (
@@ -74,6 +90,11 @@ const (
 // Handlers is everything the router mounts.
 type Handlers struct {
 	Identity     *identityhttp.Handler
+	Audit        *audithttp.Handler
+	Share        *sharehttp.Handler
+	DocCollab    *docsws.Collab
+	Calendar     *calhttp.Handler
+	AuditLog     *auditapp.Service
 	Workspace    *workspacehttp.Handler
 	Work         *workhttp.Handler
 	Docs         *docshttp.Handler
@@ -113,6 +134,8 @@ type ServerContainer struct {
 	// Ready checks every backing service the API needs (database, Redis, object storage).
 	Ready    func(context.Context) error
 	Hub      *realtimeapp.Hub
+	// Jobs run in the background for the server's lifetime.
+	Jobs     []func(context.Context)
 	Services Services
 	Handlers Handlers
 }
@@ -153,6 +176,17 @@ func NewServerContainer(ctx context.Context, sh *Shared) (*ServerContainer, erro
 			AccessTTL: accessTTL, RefreshTTL: orDefault(cfg.JWT.RefreshTokenTTL, defaultRefreshTTL), ResetTTL: defaultResetTTL,
 		})
 	userSvc := identityapp.NewUserService(userRepo)
+	box, err := secretbox.FromPassphrase(cfg.JWT.Secret + ":identity")
+	if err != nil {
+		return nil, err
+	}
+	identityKey := sha256.Sum256([]byte(cfg.JWT.Secret + ":identity-tokens"))
+	authSvc.EnableSecurity(box, identityKey[:], identitypg.NewIdentityRepository(db))
+	auditSvc := auditapp.NewService(auditpg.NewRepository(db), log)
+	delivery, err := newDelivery(sh)
+	if err != nil {
+		return nil, fmt.Errorf("notification delivery: %w", err)
+	}
 	dir := userDirectory{users: userSvc}
 
 	// workspace + notify
@@ -221,6 +255,15 @@ func NewServerContainer(ctx context.Context, sh *Shared) (*ServerContainer, erro
 	} else {
 		log.Warn("ai.gemini_api_key is empty; the AI assistant is disabled")
 	}
+	// One-shot model calls: AI triage of new tasks and "ask the workspace".
+	var llm *gemini.Client
+	if cfg.AI.GeminiAPIKey != "" {
+		if llm, err = gemini.New(ctx, cfg.AI.GeminiAPIKey, cfg.AI.Model); err != nil {
+			return nil, err
+		}
+		workSvc.UseTriager(geminiTriager{llm})
+	}
+	assistantSvc := assistantapp.NewService(agent, assistantpg.NewAgents(db))
 
 	searchSvc := newSearchService(ctx, sh)
 
@@ -228,6 +271,14 @@ func NewServerContainer(ctx context.Context, sh *Shared) (*ServerContainer, erro
 	if err != nil {
 		return nil, fmt.Errorf("integrations: %w", err)
 	}
+
+	// Private Spaces: docs and search hide what the work context says a person can't see.
+	docsSvc.HideSpaces(workSvc.HiddenProjects)
+	searchSvc.HideItems(workSvc.HiddenIDs)
+
+	shareSvc := shareapp.NewService(sharepg.NewRepository(db), map[string]shareapp.Content{
+		"doc": docContent{docsSvc}, "whiteboard": whiteboardContent{docsSvc}, "list": listContent{workSvc},
+	}, shareAccess(workSvc, docsSvc))
 
 	snap := snapshot{providers: []SnapshotProvider{wsSvc, workSvc, docsSvc, goalsSvc, chatSvc, notifySvc, mediaSvc, meetSvc}}
 
@@ -240,19 +291,41 @@ func NewServerContainer(ctx context.Context, sh *Shared) (*ServerContainer, erro
 			return storeReady(ctx)
 		},
 		Hub:      hub,
+		// Scheduled agents post their reports to chat; claims make this safe on several replicas.
+		Jobs: []func(context.Context){func(ctx context.Context) {
+			t := time.NewTicker(time.Minute)
+			defer t.Stop()
+			for {
+				if n, err := assistantSvc.RunDue(ctx, chatPoster(chatSvc)); err != nil && ctx.Err() == nil {
+					log.Warn("scheduled agents failed", zap.Error(err))
+				} else if n > 0 {
+					log.Info("ran scheduled agents", zap.Int("count", n))
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+				}
+			}
+		}},
 		Services: Services{Auth: authSvc, Users: userSvc, Workspaces: wsSvc, Work: workSvc, Docs: docsSvc, Goals: goalsSvc, Chat: chatSvc, Notify: notifySvc, Media: mediaSvc, Meet: meetSvc, Search: searchSvc, Integrations: integrationsSvc},
 		Handlers: Handlers{
-			Identity:     identityhttp.NewHandler(authSvc, userSvc),
+			Identity:     identityhttp.NewHandler(authSvc, userSvc).WithSecurity(auditSvc, ssoProviders(cfg), cfg.Web.URL),
+			Audit:        audithttp.NewHandler(auditSvc),
+			Share:        sharehttp.NewHandler(shareSvc),
+			DocCollab:    docsws.NewCollab(docspg.NewRepository(db), docCollabAccess(docsSvc, workSvc, wsSvc), cfg.Web.AllowedOrigins, log),
+			Calendar:     calhttp.NewHandler(calapp.NewService(calpg.NewRepository(db), calSource{workSvc, meetSvc, wsSvc}, cfg.Web.URL), cfg.Web.URL),
+			AuditLog:     auditSvc,
 			Workspace:    workspacehttp.NewHandler(wsSvc, snap),
-			Work:         workhttp.NewHandler(workSvc, mentions),
+			Work:         workhttp.NewHandler(workSvc, mentions).WithInbound(cfg.Inbound.Domain, cfg.Inbound.Secret, authSvc.UserIDByEmail),
 			Docs:         docshttp.NewHandler(docsSvc),
 			Goals:        goalshttp.NewHandler(goalsSvc),
 			Chat:         chathttp.NewHandler(chatSvc),
-			Notify:       notifyhttp.NewHandler(notifySvc),
+			Notify:       notifyhttp.NewHandler(notifySvc).WithDelivery(delivery),
 			Media:        mediahttp.NewHandler(mediaSvc, maxUpload),
 			Meet:         meethttp.NewHandler(meetSvc, rooms, log),
-			Assistant:    assistanthttp.NewHandler(assistantapp.NewService(agent, assistantpg.NewAgents(db))),
-			Search:       searchhttp.NewHandler(searchSvc),
+			Assistant:    assistanthttp.NewHandler(assistantSvc).WithAsk(askLLM(llm), searchRetriever(searchSvc)),
+			Search:       searchhttp.NewHandler(searchSvc, searchapp.NewSavedSearches(searchpg.NewSaved(db))),
 			Integrations: integrationshttp.NewHandler(integrationsSvc),
 			Realtime:     realtimews.NewHandler(hub, wsSvc, cfg.Web.AllowedOrigins, log),
 			Signer:       signer,
@@ -326,4 +399,17 @@ func orDefault(d, def time.Duration) time.Duration {
 		return d
 	}
 	return def
+}
+
+// ssoProviders builds the single sign-on providers that have credentials configured.
+func ssoProviders(cfg *config.Config) []*oidc.Provider {
+	var out []*oidc.Provider
+	o := cfg.OAuth
+	if o.GoogleClientID != "" && o.GoogleClientSecret != "" {
+		out = append(out, &oidc.Provider{ID: "google", Name: "Google", Issuer: "https://accounts.google.com", ClientID: o.GoogleClientID, ClientSecret: o.GoogleClientSecret})
+	}
+	if o.OIDCIssuer != "" && o.OIDCClientID != "" {
+		out = append(out, &oidc.Provider{ID: "oidc", Name: cmp.Or(o.OIDCName, "SSO"), Issuer: o.OIDCIssuer, ClientID: o.OIDCClientID, ClientSecret: o.OIDCClientSecret})
+	}
+	return out
 }

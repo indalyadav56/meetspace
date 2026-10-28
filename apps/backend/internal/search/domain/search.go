@@ -22,6 +22,8 @@ type Document struct {
 	Parent string `json:"parent,omitempty"`
 	// Key is a human reference such as "MS-12".
 	Key string `json:"key,omitempty"`
+	// Author is who created or wrote the item.
+	Author string `json:"author,omitempty"`
 	// Audience limits who may see it (DMs); empty means everyone in the workspace.
 	Audience  []string  `json:"audience"`
 	Public    bool      `json:"public"`
@@ -46,6 +48,26 @@ type Query struct {
 	// Sort is "relevance" (default) or "recent".
 	Sort  string
 	Limit int
+	// WithBody keeps each hit's full text (for the assistant); otherwise only the snippet is sent.
+	WithBody bool
+	// Optional narrowing: who wrote it, where it lives (List, channel, Space…) and when it changed.
+	Authors  []string
+	Parents  []string
+	From, To *time.Time
+}
+
+// SavedSearch is a query someone kept to run again.
+type SavedSearch struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Query     map[string]any `json:"query"`
+	CreatedAt time.Time      `json:"createdAt"`
+}
+
+type SavedRepository interface {
+	List(ctx context.Context, workspaceID, userID string) ([]SavedSearch, error)
+	Save(ctx context.Context, workspaceID, userID string, s *SavedSearch) error
+	Delete(ctx context.Context, workspaceID, userID, id string) error
 }
 
 type Results struct {

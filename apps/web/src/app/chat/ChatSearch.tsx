@@ -6,6 +6,7 @@ import { useCall } from '../calls/useCall'
 import { useMe, useStore } from '../../store/useStore'
 import type { Channel, ID, User } from '../../store/types'
 import { Avatar } from '../components/ui'
+import { api } from '../../api/client'
 import { cn } from '../../lib/utils'
 
 /** Avatar with a presence dot and the person's status emoji, for chat lists. */
@@ -102,10 +103,25 @@ export default function ChatSearch({ q, setQ, channelTitle, renderIdle }: { q: s
     const channelId = s.openDM(u.id)
     void useCall.getState().prepare({ title: u.name, kind, channelId, meetingId: null, invitees: [me.id, u.id] })
   }
+  // The server has the full history; show its matches that aren't loaded here.
+  const [older, setOlder] = useState<{ entity_id: string; parent?: string; snippet?: string; title: string; author?: string; updated_at: string }[]>([])
+  useEffect(() => {
+    if (needle.length < 2) return setOlder([])
+    const ctrl = new AbortController()
+    const t = setTimeout(() => {
+      api
+        .get<{ hits: typeof older }>(`/workspaces/${s.currentWorkspaceId}/search?${new URLSearchParams({ q: needle, type: 'message', sort: 'recent', limit: '20' })}`, { signal: ctrl.signal })
+        .then((r) => setOlder(r.hits.filter((h) => !s.messages.some((m) => m.id === h.entity_id))))
+        .catch(() => setOlder([]))
+    }, 200)
+    return () => (clearTimeout(t), ctrl.abort())
+  }, [needle, s.currentWorkspaceId]) // messages already loaded are filtered when results arrive
+
   const hits: Hit[] = [
     ...people.map((u) => ({ key: `p:${u.id}`, go: () => openPerson(u) })),
     ...channels.map((c) => ({ key: `c:${c.id}`, go: () => nav(`/app/chat/${c.id}`) })),
     ...messages.map((m) => ({ key: `m:${m.id}`, go: () => nav(`/app/chat/${m.channelId}?m=${m.id}`) })),
+    ...older.map((h) => ({ key: `o:${h.entity_id}`, go: () => nav(`/app/chat/${h.parent}?m=${h.entity_id}`) })),
   ]
   useEffect(() => setCursor(0), [needle])
   const pick = (h?: Hit) => {
@@ -235,6 +251,27 @@ export default function ChatSearch({ q, setQ, channelTitle, renderIdle }: { q: s
                   <span className="line-clamp-2 text-[12px] leading-snug">
                     <Hl text={excerpt(m.text, q.trim())} q={q.trim()} />
                   </span>
+                </span>
+              </button>
+            )
+          })}
+          {older.length > 0 && <Section label="Older messages" n={older.length} />}
+          {older.map((h) => {
+            const c = s.channels.find((x) => x.id === h.parent)
+            return (
+              <button key={h.entity_id} onClick={() => pick(hits.find((x) => x.key === `o:${h.entity_id}`))} onMouseEnter={() => setCursor(hits.findIndex((x) => x.key === `o:${h.entity_id}`))} className={cn(rowCls(`o:${h.entity_id}`), 'items-start')}>
+                {h.author ? <Avatar userId={h.author} size={20} /> : <MessageSquare size={16} className="text-faint" />}
+                <span className="min-w-0 flex-1">
+                  <span className="text-faint flex items-center gap-1 text-[11px]">
+                    <span className="truncate">{c ? (c.kind === 'channel' ? '#' : '') + channelTitle(c) : 'Message'}</span>
+                    <span className="ml-auto shrink-0">{format(parseISO(h.updated_at), 'MMM d')}</span>
+                  </span>
+                  {/* Snippets come HTML-escaped from the search engine with only <mark> added; titles are raw text. */}
+                  {h.snippet ? (
+                    <span className="line-clamp-2 text-[12px] leading-snug [&_mark]:rounded-sm [&_mark]:bg-amber-200/70 dark:[&_mark]:bg-amber-500/40" dangerouslySetInnerHTML={{ __html: h.snippet }} />
+                  ) : (
+                    <span className="line-clamp-2 text-[12px] leading-snug">{h.title}</span>
+                  )}
                 </span>
               </button>
             )

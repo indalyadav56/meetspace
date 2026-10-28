@@ -17,8 +17,18 @@ type Agent struct {
 	Instructions string    `json:"instructions"`
 	Icon         string    `json:"icon"`
 	// Kind is "agent" (a persona) or "skill" (a reusable workflow the assistant applies on request).
-	Kind      string `json:"kind"`
-	Enabled   bool   `json:"enabled"`
+	Kind    string `json:"kind"`
+	Enabled bool   `json:"enabled"`
+	// Schedule runs the agent by itself: none, daily, weekdays or weekly (on ScheduleDay, 0=Sunday).
+	Schedule       string     `json:"schedule"`
+	ScheduleTime   string     `json:"scheduleTime"`
+	ScheduleDay    int        `json:"scheduleDay"`
+	Timezone       string     `json:"timezone"`
+	SchedulePrompt string     `json:"schedulePrompt"`
+	ChannelID      *string    `json:"channelId"`
+	NextRunAt      *time.Time `json:"nextRunAt"`
+	LastRunAt      *time.Time `json:"lastRunAt"`
+	LastResult     string     `json:"lastResult"`
 	CreatedBy    *string   `json:"createdBy"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
@@ -36,6 +46,11 @@ var (
 )
 
 type AgentRepository interface {
+	// Due lists agents whose next scheduled run has come, across workspaces.
+	Due(ctx context.Context, now time.Time, limit int) ([]Agent, error)
+	// Claim moves an agent's next run forward; false if another process already did.
+	Claim(ctx context.Context, id string, from time.Time, next *time.Time) (bool, error)
+	SaveRun(ctx context.Context, id, result string, at time.Time) error
 	List(ctx context.Context, ws string) ([]Agent, error)
 	Get(ctx context.Context, ws, id string) (*Agent, error)
 	Create(ctx context.Context, a *Agent) error

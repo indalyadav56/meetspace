@@ -42,6 +42,7 @@ import {
   Unlock,
   type LucideIcon,
 } from 'lucide-react'
+import { ShareButton } from '../components/ShareDialog'
 import { useStore } from '../../store/useStore'
 import type { BoardItem, Whiteboard } from '../../store/types'
 import { MenuItem, Popover, usePopover } from '../components/ui'
@@ -564,6 +565,7 @@ export function BoardEditor({ board }: { board: Whiteboard }) {
         </Link>
         <input value={board.title} onChange={(e) => updateWhiteboard(board.id, { title: e.target.value })} className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" aria-label="Whiteboard title" />
         <IconBtn icon={Star} label={favorites.includes(board.id) ? 'Remove from favorites' : 'Add to favorites'} on={favorites.includes(board.id)} onClick={() => toggleFavorite(board.id)} />
+        <ShareButton kind="whiteboard" id={board.id} title={board.title} className="h-7" />
         {notice && <span className="text-brand-600 shrink-0 text-xs">{notice}</span>}
         <span className="text-faint hidden shrink-0 text-xs sm:inline">{items.length} items</span>
         <button onClick={tplPop.toggle} className="hover-surface text-muted inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium">

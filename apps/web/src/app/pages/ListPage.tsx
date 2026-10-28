@@ -1,9 +1,10 @@
 import { useEffect } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { Star } from 'lucide-react'
+import { Star, Lock } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import ViewHost from '../views/ViewHost'
 import DetailsBar from '../components/DetailsBar'
+import { ShareButton } from '../components/ShareDialog'
 import { InlineEdit } from '../components/ui'
 import { cn } from '../../lib/utils'
 import { ChevronRight } from 'lucide-react'
@@ -51,6 +52,8 @@ export default function ListPage() {
         <button onClick={() => s.toggleFavorite(listId)} aria-label="Toggle favorite" className="hover-surface rounded p-1">
           <Star size={15} className={cn(fav ? 'fill-amber-400 text-amber-400' : 'text-faint')} />
         </button>
+        {space.private && <Lock size={13} className="text-faint" aria-label="Private Space" />}
+        <ShareButton kind="list" id={listId} title={list.name} spaceId={space.id} className="ml-auto" />
       </div>
       <DetailsBar value={list} onChange={(p) => s.updateList(listId, p)} what="List" className="-mt-1 px-4 pb-1" />
       <div className="min-h-0 flex-1">

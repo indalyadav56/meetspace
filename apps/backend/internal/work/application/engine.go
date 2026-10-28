@@ -70,6 +70,8 @@ func (s *Service) runAutomations(ctx context.Context, t *domain.Task, proj *doma
 						s.emit(ctx, ws, "comments", "upsert", c)
 					}
 				}
+			case "ai_triage":
+				go s.aiTriage(ws, cur.ID, proj, act.Value)
 			case "notify":
 				text := act.Value
 				if text == "" {

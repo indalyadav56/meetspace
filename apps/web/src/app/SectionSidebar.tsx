@@ -4,7 +4,6 @@ import {
   AlarmClock,
   AtSign,
   Bell,
-  BellOff,
   CalendarDays,
   CheckSquare,
   Clock,
@@ -21,10 +20,15 @@ import {
   PenTool,
   Plus,
   Settings,
+  ScrollText,
+  ShieldCheck,
   Share2,
   Star,
   Archive,
   CheckCircle2,
+  CheckCheck,
+  AlertTriangle,
+  UserPlus,
   Tag as TagIcon,
   Target,
   Timer,
@@ -35,13 +39,13 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react'
+import { useInbox, type InboxKind } from './inbox/items'
 import { useStore } from '../store/useStore'
 import { ProjectsSidebar, rowCls } from './Sidebar'
 import { AISidebar } from './pages/ai/AISidebar'
 import { PlannerSidebar } from './pages/planner/PlannerSidebar'
 import { AppsSidebar } from './pages/apps/AppsSidebar'
 import { TeamsSidebar } from './pages/teams/TeamsSidebar'
-import { isSnoozed, useSnoozed } from './inbox/snooze'
 import { cn } from '../lib/utils'
 
 /*
@@ -210,20 +214,26 @@ function HomeSidebar() {
 }
 
 function InboxSidebar() {
-  const n = useStore((s) => s.notifications)
-  const { until } = useSnoozed()
-  const important = n.filter((x) => !x.cleared && x.important && !x.read && !isSnoozed(until, x.id)).length
-  const other = n.filter((x) => !x.cleared && !x.important && !x.read && !isSnoozed(until, x.id)).length
-  const later = n.filter((x) => !x.cleared && isSnoozed(until, x.id)).length
+  const inbox = useInbox()
+  const unread = useStore((s) => s.notifications.filter((n) => !n.read && !n.cleared).length)
+  const n = (k: InboxKind) => inbox.todo.filter((it) => it.kind === k).length
   return (
     <SidebarShell title="Inbox">
       <Group>
-        <Row to="/app/inbox" icon={Bell} label="Primary" count={important} keys={['tab']} />
-        <Row to="/app/inbox?tab=other" icon={AtSign} label="Other" count={other} keys={['tab']} />
-        <Row to="/app/inbox?tab=later" icon={AlarmClock} label="Later" count={later} keys={['tab']} />
-        <Row to="/app/inbox?tab=cleared" icon={BellOff} label="Cleared" keys={['tab']} />
+        <Row to="/app/inbox" icon={InboxIcon} label="To do" count={inbox.todo.length} keys={['tab', 'kind']} />
+        <Row to="/app/inbox?tab=later" icon={AlarmClock} label="Later" count={inbox.later.length} keys={['tab', 'kind']} />
+        <Row to="/app/inbox?tab=done" icon={CheckCheck} label="Done" keys={['tab', 'kind']} />
+      </Group>
+      <Group label="Needs you">
+        <Row to="/app/inbox?kind=overdue" icon={AlertTriangle} label="Overdue" count={n('overdue')} keys={['tab', 'kind']} />
+        <Row to="/app/inbox?kind=today" icon={CalendarDays} label="Due today" count={n('today')} keys={['tab', 'kind']} />
+        <Row to="/app/inbox?kind=assigned" icon={UserPlus} label="Assigned to you" count={n('assigned')} keys={['tab', 'kind']} />
+        <Row to="/app/inbox?kind=mention" icon={AtSign} label="Mentions" count={n('mention')} keys={['tab', 'kind']} />
+        <Row to="/app/inbox?kind=comment" icon={MessageSquareDot} label="Assigned comments" count={n('comment')} keys={['tab', 'kind']} />
+        <Row to="/app/inbox?kind=reminder" icon={AlarmClock} label="Reminders" count={n('reminder')} keys={['tab', 'kind']} />
       </Group>
       <Group label="Related">
+        <Row to="/app/notifications" icon={Bell} label="Notifications" count={unread} />
         <Row to="/app/planner" icon={CalendarDays} label="Planner" />
         <Row to="/app/settings?tab=notifications" icon={Settings} label="Notification settings" />
       </Group>
@@ -377,6 +387,11 @@ function SettingsSidebar() {
         <Row to="/app/settings?tab=members" icon={Users} label="Members" keys={['tab']} />
         <Row to="/app/settings?tab=data" icon={Database} label="Import & export" keys={['tab']} />
         <Row to="/app/settings?tab=notifications" icon={Bell} label="Notifications" keys={['tab']} />
+        <Row to="/app/settings?tab=calendar" icon={CalendarDays} label="Calendar sync" keys={['tab']} />
+      </Group>
+      <Group label="Security">
+        <Row to="/app/settings?tab=security" icon={ShieldCheck} label="Security & sign-in" keys={['tab']} />
+        <Row to="/app/settings?tab=audit" icon={ScrollText} label="Audit log" keys={['tab']} />
       </Group>
       <Group label="Features">
         <Row to="/app/settings?tab=tags" icon={TagIcon} label="Tag manager" keys={['tab']} />
@@ -436,6 +451,7 @@ export default function SectionSidebar() {
     case 'meetings':
       return <HomeSidebar />
     case 'inbox':
+    case 'notifications':
       return <InboxSidebar />
     case 'docs':
       return <DocsSidebar />

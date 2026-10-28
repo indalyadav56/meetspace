@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { create } from 'zustand'
 import { ArrowRight, CalendarDays, ChevronDown, Flag, Tag as TagIcon, UserRound, X } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import type { ID, Priority, Status, StatusType } from '../../store/types'
+import type { ID, IssueType, Priority, Status, StatusType } from '../../store/types'
+import { EpicMenu, IssueTypeMenu } from '../components/issue'
 import { AssigneeMenu, DateButton, Modal, PriorityMenu, StatusDot, StatusMenu, Tag } from '../components/ui'
 import { cn } from '../../lib/utils'
 
@@ -15,6 +16,8 @@ export interface CreateTaskDefaults {
   dueDate?: string | null
   assignees?: ID[]
   priority?: Priority
+  epicId?: ID | null
+  issueType?: IssueType
 }
 
 /** Open the Create task dialog from anywhere: `useCreateTask.getState().open({ listId })`. */
@@ -71,6 +74,8 @@ function Form({ defaults, onClose }: { defaults: CreateTaskDefaults; onClose: ()
   const [startDate, setStartDate] = useState<string | null>(null)
   const [dueDate, setDueDate] = useState<string | null>(defaults.dueDate ?? null)
   const [priority, setPriority] = useState<Priority>(defaults.priority ?? null)
+  const [issueType, setIssueType] = useState<IssueType>(defaults.issueType ?? 'task')
+  const [epicId, setEpicId] = useState<ID | null>(defaults.epicId ?? null)
   const [tags, setTags] = useState<string[]>([])
   const [tagDraft, setTagDraft] = useState('')
   const [another, setAnother] = useState(false)
@@ -92,7 +97,7 @@ function Form({ defaults, onClose }: { defaults: CreateTaskDefaults; onClose: ()
 
   const submit = (open: boolean) => {
     if (!title.trim() || !listId) return titleRef.current?.focus()
-    const id = s.addTask({ listId, title: title.trim(), description: description.trim(), statusId, assignees, startDate, dueDate, priority, tags })
+    const id = s.addTask({ listId, title: title.trim(), description: description.trim(), statusId, assignees, startDate, dueDate, priority, tags, issueType, epicId: issueType === 'epic' ? null : epicId })
     try {
       localStorage.setItem(LAST_LIST, listId)
     } catch {
@@ -147,6 +152,12 @@ function Form({ defaults, onClose }: { defaults: CreateTaskDefaults; onClose: ()
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 px-4 pb-3">
+        <IssueTypeMenu value={issueType} onChange={setIssueType} className={chip} />
+        {issueType !== 'epic' && (
+          <span className={chip} title="Epic">
+            <EpicMenu value={epicId} onChange={setEpicId} className="-mx-1" />
+          </span>
+        )}
         <StatusMenu statuses={statuses} value={statusId} onChange={setStatusId} className={cn(chip, 'font-semibold uppercase')}>
           <StatusDot status={status} size={12} /> {status?.name ?? 'Status'} <ChevronDown size={12} className="text-faint" />
         </StatusMenu>

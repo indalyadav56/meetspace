@@ -24,6 +24,8 @@ type Config struct {
 	OpenSearch OpenSearch `mapstructure:"opensearch"`
 	Web        Web        `mapstructure:"web"`
 	Resend     Resend     `mapstructure:"resend"`
+	OAuth      OAuth      `mapstructure:"oauth"`
+	Inbound    Inbound    `mapstructure:"inbound"`
 	// Integrations configures third-party connections such as GitHub.
 	Integrations Integrations  `mapstructure:"integrations"`
 	SMTP         SMTP          `mapstructure:"smtp"`
@@ -164,6 +166,24 @@ type Integrations struct {
 
 // Resend sends transactional email (password resets, invites) through the
 // Resend API. It takes precedence over SMTP when APIKey is set.
+// Inbound configures email-to-task. Point your provider's inbound webhook
+// (Postmark, Mailgun, SendGrid…) at /api/v1/inbound/email/<secret>.
+type Inbound struct {
+	Domain string `mapstructure:"domain"`
+	Secret string `mapstructure:"secret"`
+}
+
+// OAuth configures single sign-on. Each provider is off until its client id is set.
+type OAuth struct {
+	GoogleClientID     string `mapstructure:"google_client_id"`
+	GoogleClientSecret string `mapstructure:"google_client_secret"`
+	// A generic OpenID Connect provider (Okta, Microsoft Entra, Auth0, Keycloak…).
+	OIDCName         string `mapstructure:"oidc_name"`
+	OIDCIssuer       string `mapstructure:"oidc_issuer"`
+	OIDCClientID     string `mapstructure:"oidc_client_id"`
+	OIDCClientSecret string `mapstructure:"oidc_client_secret"`
+}
+
 type Resend struct {
 	APIKey string `mapstructure:"api_key"`
 	// From must use a domain verified in Resend; onboarding@resend.dev works

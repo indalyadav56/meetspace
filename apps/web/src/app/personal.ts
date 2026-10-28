@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { api } from '../api/client'
 
 /*
  * Per-browser account preferences: which personal tools sit in the top bar,
@@ -53,6 +54,11 @@ export const usePersonal = create<Personal>()((set) => ({
     const mutedUntil = until ? until.toISOString() : null
     write(MUTE, mutedUntil)
     set({ mutedUntil })
+    // Push and instant email are sent by the server, so it needs to know too.
+    void api
+      .get<Record<string, unknown>>('/users/me/notifications/preferences')
+      .then((prefs) => api.raw('PUT', '/users/me/notifications/preferences', { body: { ...prefs, pausedUntil: mutedUntil } }))
+      .catch(() => {})
   },
   popup: null,
   openPopup: (tool, anchor) => set((s) => ({ popup: s.popup?.tool === tool && s.popup.anchor === anchor ? null : { tool, anchor } })),

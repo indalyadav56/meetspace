@@ -12,9 +12,52 @@ import (
 	"github.com/indalyadav56/meetspace/backend/pkg/response"
 )
 
-type Handler struct{ svc *application.Service }
+type Handler struct {
+	svc  *application.Service
+	llm  application.LLM
+	find application.Retriever
+}
 
 func NewHandler(svc *application.Service) *Handler { return &Handler{svc: svc} }
+
+// WithAsk turns on "ask the workspace" answers grounded in search results.
+func (h *Handler) WithAsk(llm application.LLM, find application.Retriever) *Handler {
+	h.llm, h.find = llm, find
+	return h
+}
+
+func (h *Handler) summarize(c *gin.Context) {
+	var r struct {
+		Title      string `json:"title"`
+		Transcript string `json:"transcript" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&r); err != nil {
+		response.BadRequest(c, err)
+		return
+	}
+	out, err := h.svc.Summarize(c.Request.Context(), r.Title, r.Transcript, h.llm)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.Data(c, http.StatusOK, out)
+}
+
+func (h *Handler) ask(c *gin.Context) {
+	var r struct {
+		Question string `json:"question" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&r); err != nil {
+		response.BadRequest(c, err)
+		return
+	}
+	a, err := h.svc.Ask(c.Request.Context(), authctx.WorkspaceID(c), authctx.UserID(c), r.Question, h.llm, h.find)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.Data(c, http.StatusOK, a)
+}
 
 type chatReq struct {
 	AgentID   string `json:"agentId"`
@@ -106,6 +149,8 @@ func (h *Handler) deleteAgent(c *gin.Context) {
 func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.GET("/assistant", h.status)
 	rg.POST("/assistant/chat", h.chat)
+	rg.POST("/assistant/ask", h.ask)
+	rg.POST("/assistant/summarize", h.summarize)
 	rg.GET("/assistant/agents", h.agents)
 	rg.POST("/assistant/agents", h.saveAgent)
 	rg.PUT("/assistant/agents/:id", h.saveAgent)

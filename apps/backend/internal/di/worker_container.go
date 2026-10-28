@@ -3,6 +3,9 @@ package di
 import (
 	"context"
 
+	auditapp "github.com/indalyadav56/meetspace/backend/internal/audit/application"
+	auditpg "github.com/indalyadav56/meetspace/backend/internal/audit/infrastructure/postgres"
+
 	notifyapp "github.com/indalyadav56/meetspace/backend/internal/notify/application"
 	notifypg "github.com/indalyadav56/meetspace/backend/internal/notify/infrastructure/postgres"
 	realtimeapp "github.com/indalyadav56/meetspace/backend/internal/realtime/application"
@@ -17,11 +20,20 @@ type WorkerContainer struct {
 	*Shared
 	Notify *notifyapp.Service
 	Search *searchapp.Service
-	Bus    realtimedomain.Bus
+	Audit    *auditapp.Service
+	Delivery *notifyapp.Delivery
+	Bus      realtimedomain.Bus
 }
 
-func NewWorkerContainer(ctx context.Context, sh *Shared) *WorkerContainer {
+func NewWorkerContainer(ctx context.Context, sh *Shared) (*WorkerContainer, error) {
 	bus := realtimeredis.NewBus(sh.Redis)
 	hub := realtimeapp.NewHub(bus, sh.Log)
-	return &WorkerContainer{Shared: sh, Notify: notifyapp.NewService(notifypg.NewRepository(sh.DB), hub), Search: newSearchService(ctx, sh), Bus: bus}
+	delivery, err := newDelivery(sh)
+	if err != nil {
+		return nil, err
+	}
+	return &WorkerContainer{
+		Shared: sh, Notify: notifyapp.NewService(notifypg.NewRepository(sh.DB), hub), Search: newSearchService(ctx, sh),
+		Audit: auditapp.NewService(auditpg.NewRepository(sh.DB), sh.Log), Delivery: delivery, Bus: bus,
+	}, nil
 }

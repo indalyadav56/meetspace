@@ -30,6 +30,7 @@ import { CustomValueEditor } from '../task/TaskExtras'
 import { PRIORITIES, cn } from '../../lib/utils'
 import BulkBar from './BulkBar'
 import { COLUMNS, GROUP_LABELS, useListPrefs, type ColKey, type GroupBy } from './listPrefs'
+import { EpicChip, IssueIcon } from '../components/issue'
 
 export interface ViewProps {
   tasks: Task[]
@@ -653,9 +654,13 @@ function TaskRow({
               aria-label="Task name"
             />
           ) : (
-            <span onDoubleClick={(e) => (e.stopPropagation(), setRenaming(true))} className={cn('truncate font-medium', done && 'text-faint line-through')}>
-              {task.title}
-            </span>
+            <>
+              {task.issueType && task.issueType !== 'task' && <IssueIcon type={task.issueType} size={14} />}
+              <span onDoubleClick={(e) => (e.stopPropagation(), setRenaming(true))} className={cn('truncate font-medium', done && 'text-faint line-through')}>
+                {task.title}
+              </span>
+              {task.epicId && task.issueType !== 'epic' && <EpicChip epicId={task.epicId} className="hidden shrink-0 xl:inline-flex" />}
+            </>
           )}
           {!renaming && (
             <button onClick={(e) => (e.stopPropagation(), setRenaming(true))} className="text-faint hover:text-app shrink-0 opacity-0 group-hover:opacity-100" aria-label="Rename task" title="Rename">

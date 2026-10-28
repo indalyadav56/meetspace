@@ -13,6 +13,7 @@ import TaskDetail from './task/TaskDetail'
 import CreateTaskModal from './task/CreateTaskModal'
 import CommandPalette from './CommandPalette'
 import { cn } from '../lib/utils'
+import { refreshPush } from './notifications/push'
 import { X } from 'lucide-react'
 
 /** Short-lived messages, e.g. a change the server rejected. */
@@ -42,6 +43,11 @@ export default function AppLayout() {
   const loc = useLocation()
   const nav = useNavigate()
 
+  // Keep this browser's push subscription tied to whoever is signed in.
+  const me = useStore((s) => s.currentUserId)
+  useEffect(() => {
+    if (me) void refreshPush()
+  }, [me])
   useEffect(() => {
     setMobileNav(false)
   }, [loc.pathname])

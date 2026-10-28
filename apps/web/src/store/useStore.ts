@@ -136,7 +136,11 @@ interface State {
   sidebarCollapsed: boolean
   openTaskId: ID | null
 
-  signIn: (email: string, password: string) => Promise<void>
+  /** Resolves with an mfaToken when the account needs a second factor. */
+  signIn: (email: string, password: string) => Promise<{ mfaToken?: string }>
+  completeMfa: (mfaToken: string, code: string) => Promise<void>
+  /** Starts a session from tokens handed back by single sign-on. */
+  signInWithTokens: (tokens: Tokens) => Promise<void>
   /** Creates the account and signs in, without loading a workspace (onboarding creates it next). */
   signUp: (name: string, email: string, password: string) => Promise<void>
   /** Final onboarding step: creates the user's first workspace, invites teammates and adds starter Lists. */
@@ -312,7 +316,7 @@ function toApi<T extends object>(x: T): Record<string, unknown> {
 
 const TASK_PATCH_KEYS = [
   'listId', 'title', 'description', 'statusId', 'priority', 'assignees', 'tags', 'startDate', 'dueDate', 'estimate', 'checklist',
-  'recurrence', 'custom', 'sprintId', 'points', 'watchers',
+  'recurrence', 'custom', 'sprintId', 'points', 'watchers', 'issueType', 'epicId',
 ] as const
 
 function pick<T extends object>(obj: T, keys: readonly string[]) {
@@ -474,6 +478,10 @@ export const useStore = create<State>()(
             }))
             if (e.op === 'delete' && p.userId === me()) void get().bootstrap()
             return
+          case 'access':
+            // A Space was opened to this person: load its Lists and tasks.
+            void get().bootstrap()
+            return
           case 'workspaces':
             if (e.op === 'delete') {
               set((s) => ({ workspaces: s.workspaces.filter((x) => x.id !== p.id) }))
@@ -564,8 +572,19 @@ export const useStore = create<State>()(
         openTaskId: null,
 
         signIn: async (email, password) => {
-          const r = await api.raw<{ user: User; tokens: Tokens }>('POST', '/auth/login', { body: { email, password }, anonymous: true })
+          const r = await api.raw<{ user: User; tokens: Tokens } | { mfaRequired: true; mfaToken: string }>('POST', '/auth/login', { body: { email, password }, anonymous: true })
+          if ('mfaRequired' in r) return { mfaToken: r.mfaToken }
           await startSession(r.tokens, r.user)
+          return {}
+        },
+        completeMfa: async (mfaToken, code) => {
+          const r = await api.raw<{ user: User; tokens: Tokens }>('POST', '/auth/login/mfa', { body: { mfaToken, code }, anonymous: true })
+          await startSession(r.tokens, r.user)
+        },
+        signInWithTokens: async (t) => {
+          session.set({ accessToken: t.accessToken, refreshToken: t.refreshToken })
+          const user = await api.get<User>('/users/me')
+          await startSession(t, user)
         },
         signUp: async (name, email, password) => {
           const r = await api.raw<{ user: User; tokens: Tokens }>('POST', '/auth/register', { body: { fullName: name, email, password }, anonymous: true })
@@ -948,7 +967,7 @@ export const useStore = create<State>()(
           const id = input.id ?? newId()
           const task: Task = {
             parentId: null, description: '', priority: null, assignees: [], tags: [], startDate: null, dueDate: null, estimate: null, checklist: [],
-            blockedBy: [], recurrence: null, custom: {}, sprintId: null, points: null, watchers: [], clipIds: [],
+            blockedBy: [], recurrence: null, custom: {}, sprintId: null, points: null, issueType: 'task', epicId: null, watchers: [], clipIds: [],
             key: Math.max(99, ...s.tasks.map((t) => t.key)) + 1,
             statusId: space?.statuses[0]?.id ?? '',
             order: Math.max(0, ...s.tasks.map((t) => t.order)) + 1,
@@ -1150,7 +1169,7 @@ export const useStore = create<State>()(
           upsert('tasks', {
             id: taskId, key: Math.max(99, ...s.tasks.map((t) => t.key)) + 1, listId, parentId: null, title: m.text.replace(/\s+/g, ' ').slice(0, 80),
             description: `<p>${m.text.replace(/</g, '&lt;')}</p>`, statusId: space?.statuses[0]?.id ?? '', priority: null, assignees: [me()], tags: [],
-            startDate: null, dueDate: null, estimate: null, checklist: [], blockedBy: [], recurrence: null, custom: {}, sprintId: null, points: null,
+            startDate: null, dueDate: null, estimate: null, checklist: [], blockedBy: [], recurrence: null, custom: {}, sprintId: null, points: null, issueType: 'task', epicId: null,
             watchers: [], clipIds: [], order: Math.max(0, ...s.tasks.map((t) => t.order)) + 1, createdAt: now(), updatedAt: now(),
           })
           patchLocal('messages', messageId, { taskId })

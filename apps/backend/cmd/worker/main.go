@@ -38,7 +38,10 @@ func run() error {
 		return err
 	}
 	defer shared.Close()
-	c := di.NewWorkerContainer(ctx, shared)
+	c, err := di.NewWorkerContainer(ctx, shared)
+	if err != nil {
+		return err
+	}
 
 	if c.Search.Enabled() {
 		go indexChanges(ctx, c)
@@ -47,7 +50,23 @@ func run() error {
 	c.Log.Info("worker started", zap.Duration("reminder_interval", reminderInterval), zap.Bool("search_indexing", c.Search.Enabled()))
 	t := time.NewTicker(reminderInterval)
 	defer t.Stop()
+	var lastPurge time.Time
 	for {
+		// Audit events older than the retention window are dropped once a day.
+		if time.Since(lastPurge) > 24*time.Hour {
+			if n, err := c.Audit.Purge(ctx); err != nil && ctx.Err() == nil {
+				c.Log.Warn("purging audit log failed", zap.Error(err))
+			} else if n > 0 {
+				c.Log.Info("purged old audit events", zap.Int64("count", n))
+			}
+			lastPurge = time.Now()
+		}
+		// Email and browser push for notifications that are still unread.
+		if p, e, d, err := c.Delivery.Tick(ctx); err != nil && ctx.Err() == nil {
+			c.Log.Warn("notification delivery failed", zap.Error(err))
+		} else if p+e+d > 0 {
+			c.Log.Info("delivered notifications", zap.Int("pushed", p), zap.Int("emailed", e), zap.Int("digests", d))
+		}
 		n, err := c.Notify.FireDue(ctx)
 		if err != nil && ctx.Err() == nil {
 			c.Log.Error("firing reminders failed", zap.Error(err))

@@ -38,6 +38,13 @@ type Repository interface {
 	RestoreTask(ctx context.Context, workspaceID, id string) ([]Task, error)
 	PurgeTask(ctx context.Context, workspaceID, id string) ([]string, error)
 	ListTrash(ctx context.Context, workspaceID string) ([]TrashedTask, error)
+	SetProjectAccess(ctx context.Context, workspaceID, id string, private bool, members []string) error
+	InboxToken(ctx context.Context, workspaceID, listID string) (string, error)
+	SaveInbox(ctx context.Context, workspaceID, listID, actor, token string) error
+	DeleteInbox(ctx context.Context, workspaceID, listID string) error
+	InboxByToken(ctx context.Context, token string) (workspaceID, listID string, err error)
+	// UnlinkEpic detaches every task from an epic and returns their ids.
+	UnlinkEpic(ctx context.Context, workspaceID, epicID string) ([]string, error)
 	// RemoveFromBlockedBy strips deleted ids from other tasks' dependencies and returns the changed tasks.
 	RemoveFromBlockedBy(ctx context.Context, workspaceID string, ids []string) ([]Task, error)
 	MaxOrder(ctx context.Context, workspaceID string) (float64, error)

@@ -54,8 +54,12 @@ func execOne(ctx context.Context, db *sql.DB, target error, q string, args ...an
 
 func scanProject(r row) (*domain.Project, error) {
 	var p domain.Project
-	if err := r.Scan(&p.ID, &p.WorkspaceID, &p.Name, &p.Color, pgjson.Scan(&p.Statuses), &p.CreatedAt, &p.Description, &p.OwnerID, &p.Priority, &p.StartDate, &p.DueDate); err != nil {
+	if err := r.Scan(&p.ID, &p.WorkspaceID, &p.Name, &p.Color, pgjson.Scan(&p.Statuses), &p.CreatedAt, &p.Description, &p.OwnerID, &p.Priority, &p.StartDate, &p.DueDate,
+		&p.Private, pgjson.Scan(&p.Members)); err != nil {
 		return nil, notFound(err, domain.ErrProjectNotFound)
+	}
+	if p.Members == nil {
+		p.Members = []string{}
 	}
 	return &p, nil
 }
@@ -63,7 +67,8 @@ func scanProject(r row) (*domain.Project, error) {
 // detailCols reads the shared Space/List details; dates come back as YYYY-MM-DD text.
 const detailCols = `description, owner_id::text, priority, to_char(start_date, 'YYYY-MM-DD'), to_char(due_date, 'YYYY-MM-DD')`
 
-const projectCols = `id, workspace_id, name, color, statuses, created_at, ` + detailCols
+const projectCols = `id, workspace_id, name, color, statuses, created_at, ` + detailCols + `, private,
+	COALESCE((SELECT jsonb_agg(m.user_id::text ORDER BY m.added_at) FROM work.project_members m WHERE m.project_id = work.projects.id), '[]')`
 
 func (r *Repository) CreateProject(ctx context.Context, p *domain.Project) error {
 	return r.db.QueryRowContext(ctx, `INSERT INTO work.projects (id, workspace_id, name, color, statuses) VALUES (COALESCE(NULLIF($5, '')::uuid, uuidv7()), $1,$2,$3,$4) RETURNING id, created_at`,
@@ -95,6 +100,31 @@ func (r *Repository) UpdateProject(ctx context.Context, p *domain.Project) error
 	return execOne(ctx, r.db, domain.ErrProjectNotFound, `UPDATE work.projects SET name=$3, color=$4, statuses=$5,
 		description=$6, owner_id=$7::uuid, priority=$8, start_date=$9::date, due_date=$10::date WHERE workspace_id=$1 AND id=$2`,
 		p.WorkspaceID, p.ID, p.Name, p.Color, pgjson.Value(p.Statuses), p.Description, p.OwnerID, p.Priority, p.StartDate, p.DueDate)
+}
+
+// SetProjectAccess replaces a Space's privacy and member list.
+func (r *Repository) SetProjectAccess(ctx context.Context, ws, id string, private bool, members []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `UPDATE work.projects SET private=$3 WHERE workspace_id=$1 AND id=$2`, ws, id, private)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return domain.ErrProjectNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM work.project_members WHERE project_id=$1`, id); err != nil {
+		return err
+	}
+	for _, u := range members {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO work.project_members (project_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, id, u); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *Repository) DeleteProject(ctx context.Context, ws, id string) error {

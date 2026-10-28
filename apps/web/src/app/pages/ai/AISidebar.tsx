@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bot, Cable, MessageSquarePlus, Sparkles, Wand2 } from 'lucide-react'
+import { Bot, BookOpenCheck, Cable, MessageSquarePlus, Sparkles, Wand2 } from 'lucide-react'
 import { useStore } from '../../../store/useStore'
 import { useAssistant } from '../../ai/useAssistant'
 import { useAgents } from './agentsStore'
@@ -36,6 +36,7 @@ export function AISidebar() {
     >
       <Group>
         <Row to="/app/ai" icon={Sparkles} label="Ask" keys={['view']} />
+        <Row to="/app/ai?view=workspace" icon={BookOpenCheck} label="Ask the workspace" keys={['view']} />
         <Row to="/app/ai?view=agents" icon={Bot} label="Agents" count={agents.length} keys={['view']} />
         <Row to="/app/ai?view=skills" icon={Wand2} label="Skills" count={skills.length} keys={['view']} />
         <Row to="/app/apps" icon={Cable} label="Connections" />

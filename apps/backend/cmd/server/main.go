@@ -100,6 +100,9 @@ func run() error {
 	// GitHub: link pull requests and commits that mention MS-123 even without a
 	// public webhook URL. Upserts are idempotent, so extra replicas are harmless.
 	g.Go(func() error { return c.Services.Integrations.RunSync(gctx, 10*time.Minute) })
+	for _, job := range c.Jobs {
+		g.Go(func() error { job(gctx); return nil })
+	}
 	g.Go(func() error {
 		c.Log.Info("starting meetspace server", zap.String("env", cfg.AppEnv), zap.Int("port", httpCfg.Port))
 		return httpserver.New(httpCfg, router, nil).Run(gctx)

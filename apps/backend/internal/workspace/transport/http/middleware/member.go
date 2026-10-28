@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -31,10 +32,20 @@ func RequireMember(r RoleResolver) gin.HandlerFunc {
 }
 
 // DenyGuests blocks guests from mutating endpoints that need full membership.
-func DenyGuests() gin.HandlerFunc {
+// allow lists "METHOD /route" pairs guests may still use (e.g. commenting);
+// what they can reach there is limited by Space access.
+func DenyGuests(allow ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Method != "GET" && authctx.Role(c) == string(domain.RoleGuest) {
+			path := c.Request.Method + " " + strings.TrimPrefix(c.FullPath(), "/api/v1/workspaces/:wid")
+			for _, a := range allow {
+				if path == a {
+					c.Next()
+					return
+				}
+			}
 			response.FromError(c, domain.ErrForbidden)
+			c.Abort()
 			return
 		}
 		c.Next()

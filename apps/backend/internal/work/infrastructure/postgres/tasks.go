@@ -11,19 +11,20 @@ import (
 
 const taskCols = `id, workspace_id, key, list_id, parent_id::text, title, description, status_id, priority,
 	assignees, tags, start_date::text, due_date::text, estimate::float8, checklist, blocked_by, recurrence, custom,
-	sprint_id::text, points::float8, watchers, clip_ids, position, created_by::text, created_at, updated_at`
+	sprint_id::text, points::float8, watchers, clip_ids, position, created_by::text, created_at, updated_at, issue_type, epic_id::text`
 
 func scanTask(r row) (*domain.Task, error) {
 	var t domain.Task
-	var parent, priority, start, due, recurrence, sprint, createdBy sql.NullString
+	var parent, priority, start, due, recurrence, sprint, createdBy, epic sql.NullString
 	var estimate, points sql.NullFloat64
 	err := r.Scan(&t.ID, &t.WorkspaceID, &t.Key, &t.ListID, &parent, &t.Title, &t.Description, &t.StatusID, &priority,
 		pgjson.Scan(&t.Assignees), pgjson.Scan(&t.Tags), &start, &due, &estimate, pgjson.Scan(&t.Checklist), pgjson.Scan(&t.BlockedBy),
 		&recurrence, pgjson.Scan(&t.Custom), &sprint, &points, pgjson.Scan(&t.Watchers), pgjson.Scan(&t.ClipIDs), &t.Order, &createdBy,
-		&t.CreatedAt, &t.UpdatedAt)
+		&t.CreatedAt, &t.UpdatedAt, &t.IssueType, &epic)
 	if err != nil {
 		return nil, notFound(err, domain.ErrTaskNotFound)
 	}
+	t.EpicID = ptr(epic)
 	t.ParentID, t.Priority, t.StartDate, t.DueDate = ptr(parent), ptr(priority), ptr(start), ptr(due)
 	t.Recurrence, t.SprintID, t.CreatedBy = ptr(recurrence), ptr(sprint), ptr(createdBy)
 	t.Estimate, t.Points = fptr(estimate), fptr(points)
@@ -31,11 +32,25 @@ func scanTask(r row) (*domain.Task, error) {
 	return &t, nil
 }
 
+// issueType stores tasks created before issue types existed as plain tasks.
+func issueType(v string) string {
+	if v == "" {
+		return "task"
+	}
+	return v
+}
+
+// UnlinkEpic detaches every task from an epic and returns their ids.
+func (r *Repository) UnlinkEpic(ctx context.Context, ws, epicID string) ([]string, error) {
+	return scanIDs(r.db.QueryContext(ctx, `UPDATE work.tasks SET epic_id=NULL, updated_at=now() WHERE workspace_id=$1 AND epic_id=$2 RETURNING id::text`, ws, epicID))
+}
+
 // normalize guarantees non-nil collections so clients never see null arrays.
 func normalize(t *domain.Task) {
 	if t.Assignees == nil {
 		t.Assignees = []string{}
 	}
+	t.IssueType = issueType(t.IssueType)
 	if t.Tags == nil {
 		t.Tags = []string{}
 	}
@@ -60,12 +75,12 @@ func (r *Repository) CreateTask(ctx context.Context, t *domain.Task) error {
 	normalize(t)
 	return r.db.QueryRowContext(ctx, `
 		INSERT INTO work.tasks (id, workspace_id, key, list_id, parent_id, title, description, status_id, priority, assignees, tags,
-			start_date, due_date, estimate, checklist, blocked_by, recurrence, custom, sprint_id, points, watchers, clip_ids, position, created_by)
-		VALUES (COALESCE(NULLIF($24, '')::uuid, uuidv7()), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+			start_date, due_date, estimate, checklist, blocked_by, recurrence, custom, sprint_id, points, watchers, clip_ids, position, created_by, issue_type, epic_id)
+		VALUES (COALESCE(NULLIF($24, '')::uuid, uuidv7()), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$25,$26)
 		RETURNING id, created_at, updated_at`,
 		t.WorkspaceID, t.Key, t.ListID, t.ParentID, t.Title, t.Description, t.StatusID, t.Priority, pgjson.Value(t.Assignees), pgjson.Value(t.Tags),
 		t.StartDate, t.DueDate, t.Estimate, pgjson.Value(t.Checklist), pgjson.Value(t.BlockedBy), t.Recurrence, customValue(t.Custom), t.SprintID, t.Points,
-		pgjson.Value(t.Watchers), pgjson.Value(t.ClipIDs), t.Order, t.CreatedBy, t.ID).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
+		pgjson.Value(t.Watchers), pgjson.Value(t.ClipIDs), t.Order, t.CreatedBy, t.ID, issueType(t.IssueType), t.EpicID).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
 }
 
 // customValue keeps an empty custom map as {} rather than [].
@@ -110,11 +125,11 @@ func (r *Repository) UpdateTask(ctx context.Context, t *domain.Task) error {
 	return r.db.QueryRowContext(ctx, `
 		UPDATE work.tasks SET list_id=$3, parent_id=$4, title=$5, description=$6, status_id=$7, priority=$8, assignees=$9, tags=$10,
 			start_date=$11, due_date=$12, estimate=$13, checklist=$14, blocked_by=$15, recurrence=$16, custom=$17, sprint_id=$18, points=$19,
-			watchers=$20, clip_ids=$21, position=$22, updated_at=now()
+			watchers=$20, clip_ids=$21, position=$22, issue_type=$23, epic_id=$24, updated_at=now()
 		WHERE workspace_id=$1 AND id=$2 RETURNING updated_at`,
 		t.WorkspaceID, t.ID, t.ListID, t.ParentID, t.Title, t.Description, t.StatusID, t.Priority, pgjson.Value(t.Assignees), pgjson.Value(t.Tags),
 		t.StartDate, t.DueDate, t.Estimate, pgjson.Value(t.Checklist), pgjson.Value(t.BlockedBy), t.Recurrence, customValue(t.Custom), t.SprintID, t.Points,
-		pgjson.Value(t.Watchers), pgjson.Value(t.ClipIDs), t.Order).Scan(&t.UpdatedAt)
+		pgjson.Value(t.Watchers), pgjson.Value(t.ClipIDs), t.Order, issueType(t.IssueType), t.EpicID).Scan(&t.UpdatedAt)
 }
 
 func scanIDs(rows *sql.Rows, err error) ([]string, error) {

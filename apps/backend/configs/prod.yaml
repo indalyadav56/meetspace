@@ -69,6 +69,21 @@ resend:
   api_key: ""              # APP_RESEND_API_KEY
   from: ""                 # APP_RESEND_FROM, e.g. "Meetspace <noreply@yourdomain.com>" (verified domain)
 
+# Email-to-task: mail sent to <list token>@<domain> becomes a task.
+inbound:
+  domain: ""   # APP_INBOUND_DOMAIN, e.g. "in.yourcompany.com" (MX handled by your email provider)
+  secret: ""   # APP_INBOUND_SECRET, the last part of the webhook URL
+
+# Single sign-on. Callback URL to register with the provider:
+#   <web.url>/api/v1/auth/oauth/<google|oidc>/callback
+oauth:
+  google_client_id: ""      # APP_OAUTH_GOOGLE_CLIENT_ID
+  google_client_secret: ""  # APP_OAUTH_GOOGLE_CLIENT_SECRET
+  oidc_name: ""
+  oidc_issuer: ""
+  oidc_client_id: ""
+  oidc_client_secret: ""
+
 smtp:
   host: ""
   port: 587

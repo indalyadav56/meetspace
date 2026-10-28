@@ -1,9 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQueryState } from '../../lib/useQueryState'
 import { TagManager, Trash } from './settings/TagsAndTrash'
-import { Bell, Download, FileUp, Settings, Trash2, UserPlus, Users } from 'lucide-react'
+import Security from './settings/Security'
+import CalendarSync from './settings/CalendarSync'
+import Importer from '../import/Importer'
+import NotificationSettings from './settings/NotificationSettings'
+import AuditLog from './settings/AuditLog'
+import { Download, Settings, Trash2, UserPlus, Users } from 'lucide-react'
 import { useMe, useStore } from '../../store/useStore'
-import type { MemberRole, Priority, Task } from '../../store/types'
+import type { MemberRole } from '../../store/types'
 import { Avatar } from '../components/ui'
 import { useTaskResolver } from '../hooks'
 import { SPACE_COLORS, cn } from '../../lib/utils'
@@ -23,39 +28,13 @@ function csvEscape(v: unknown) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-/** RFC 4180-style parser: quoted fields, escaped quotes, newlines inside quotes. */
-export function parseCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let cur = ''
-  let q = false
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (q) {
-      if (c === '"' && text[i + 1] === '"') (cur += '"'), i++
-      else if (c === '"') q = false
-      else cur += c
-    } else if (c === '"') q = true
-    else if (c === ',') row.push(cur), (cur = '')
-    else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++
-      row.push(cur)
-      rows.push(row)
-      row = []
-      cur = ''
-    } else cur += c
-  }
-  if (cur || row.length) row.push(cur), rows.push(row)
-  return rows.filter((r) => r.some((x) => x.trim()))
-}
-
 export default function SettingsPage() {
   const s = useStore()
   const me = useMe()
   const ws = s.workspaces.find((w) => w.id === s.currentWorkspaceId)!
   const myRole = ws.members.find((m) => m.userId === me.id)?.role ?? 'member'
   const canManage = myRole === 'owner' || myRole === 'admin'
-  const [tab, setTab] = useQueryState<'general' | 'members' | 'data' | 'notifications' | 'tags' | 'trash'>('tab', 'general')
+  const [tab, setTab] = useQueryState<'general' | 'members' | 'data' | 'notifications' | 'calendar' | 'security' | 'audit' | 'tags' | 'trash'>('tab', 'general')
 
   return (
     <div className="h-full overflow-y-auto scroll-thin">
@@ -72,6 +51,9 @@ export default function SettingsPage() {
               ['members', `Members (${ws.members.length})`],
               ['data', 'Import & export'],
               ['notifications', 'Notifications'],
+              ['calendar', 'Calendar sync'],
+              ['security', 'Security'],
+              ...(canManage ? ([['audit', 'Audit log']] as const) : []),
               ['tags', 'Tags'],
               ['trash', 'Trash'],
             ] as const
@@ -100,7 +82,10 @@ export default function SettingsPage() {
         )}
         {tab === 'members' && <Members canManage={canManage} />}
         {tab === 'data' && <ImportExport />}
-        {tab === 'notifications' && <Notifications />}
+        {tab === 'notifications' && <NotificationSettings />}
+        {tab === 'calendar' && <CalendarSync />}
+        {tab === 'security' && <Security />}
+        {tab === 'audit' && (canManage ? <AuditLog /> : <p className="text-muted text-sm">Only workspace owners and admins can view the audit log.</p>)}
         {tab === 'tags' && <TagManager />}
         {tab === 'trash' && <Trash />}
       </div>
@@ -212,9 +197,6 @@ function Members({ canManage }: { canManage: boolean }) {
 function ImportExport() {
   const s = useStore()
   const r = useTaskResolver()
-  const [listId, setListId] = useState(s.lists[0]?.id ?? '')
-  const [rows, setRows] = useState<string[][] | null>(null)
-  const [result, setResult] = useState<string | null>(null)
 
   const exportCsv = () => {
     const header = ['Key', 'Title', 'Status', 'Project', 'List', 'Assignees', 'Priority', 'Start date', 'Due date', 'Story points', 'Estimate (h)', 'Tags', 'Description']
@@ -241,26 +223,6 @@ function ImportExport() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000)
   }
 
-  const mapped = useMemo(() => {
-    if (!rows?.length) return []
-    const header = rows[0].map((h) => h.trim().toLowerCase())
-    const col = (...names: string[]) => header.findIndex((h) => names.includes(h))
-    const c = { title: col('title', 'name', 'task', 'task name'), desc: col('description', 'details', 'notes'), status: col('status'), pri: col('priority'), due: col('due date', 'due', 'deadline'), start: col('start date', 'start'), tags: col('tags', 'labels'), pts: col('story points', 'points'), who: col('assignees', 'assignee', 'owner') }
-    const list = s.lists.find((l) => l.id === listId)
-    const space = s.spaces.find((sp) => sp.id === list?.spaceId)
-    const date = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}/.test(v.trim()) ? v.trim().slice(0, 10) : v && !isNaN(Date.parse(v)) ? new Date(v).toISOString().slice(0, 10) : null)
-    return rows.slice(1).map((row): Partial<Task> => ({
-      title: c.title >= 0 ? row[c.title] : row[0],
-      description: c.desc >= 0 && row[c.desc] ? `<p>${row[c.desc].replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>` : '',
-      statusId: (c.status >= 0 && space?.statuses.find((st) => st.name.toLowerCase() === row[c.status]?.trim().toLowerCase())?.id) || undefined,
-      priority: c.pri >= 0 && ['urgent', 'high', 'normal', 'low'].includes(row[c.pri]?.trim().toLowerCase()) ? (row[c.pri].trim().toLowerCase() as Priority) : null,
-      dueDate: c.due >= 0 ? date(row[c.due]) : null,
-      startDate: c.start >= 0 ? date(row[c.start]) : null,
-      tags: c.tags >= 0 && row[c.tags] ? row[c.tags].split(/[;,]/).map((x) => x.trim().toLowerCase()).filter(Boolean) : [],
-      points: c.pts >= 0 && row[c.pts] && !isNaN(Number(row[c.pts])) ? Number(row[c.pts]) : null,
-      assignees: c.who >= 0 && row[c.who] ? (row[c.who].split(/[;,]/).map((n) => s.users.find((u) => u.name.toLowerCase() === n.trim().toLowerCase())?.id).filter(Boolean) as string[]) : [],
-    }))
-  }, [rows, listId, s.lists, s.spaces, s.users])
 
   return (
     <div className="space-y-6">
@@ -273,80 +235,8 @@ function ImportExport() {
           Export {s.tasks.length} tasks
         </button>
       </section>
-      <section className="border-app rounded-xl border p-4">
-        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
-          <FileUp size={16} /> Import from CSV
-        </h2>
-        <p className="text-muted mb-3 text-sm">The first row must be headers. Recognised columns: Title/Name, Description, Status, Priority, Due date, Start date, Tags, Story points, Assignees.</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              setResult(null)
-              setRows(f ? parseCsv(await f.text()) : null)
-            }}
-            className="text-sm"
-          />
-          <span className="text-muted text-sm">into</span>
-          <select value={listId} onChange={(e) => setListId(e.target.value)} className="border-app surface rounded-md border px-2 py-1 text-sm">
-            {s.lists.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        {rows && (
-          <div className="mt-3">
-            <p className="text-sm">
-              Found <b>{mapped.filter((m) => m.title?.trim()).length}</b> tasks. Preview:
-            </p>
-            <ul className="text-muted mt-1 list-disc pl-5 text-sm">
-              {mapped.slice(0, 5).map((m, i) => (
-                <li key={i}>
-                  {m.title || <em>(no title — skipped)</em>}
-                  {m.dueDate && ` · due ${m.dueDate}`}
-                  {m.priority && ` · ${m.priority}`}
-                </li>
-              ))}
-            </ul>
-            <button
-              onClick={() => {
-                const n = s.importTasks(listId, mapped)
-                setResult(`Imported ${n} tasks into ${s.lists.find((l) => l.id === listId)?.name}.`)
-                setRows(null)
-              }}
-              className="bg-brand-600 mt-3 rounded-lg px-4 py-1.5 text-sm font-semibold text-white"
-            >
-              Import
-            </button>
-          </div>
-        )}
-        {result && <p className="mt-3 text-sm text-emerald-600">{result}</p>}
-      </section>
+      <Importer />
     </div>
   )
 }
 
-function Notifications() {
-  const [perm, setPerm] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied')
-  return (
-    <section className="border-app max-w-lg rounded-xl border p-4">
-      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
-        <Bell size={16} /> Desktop notifications
-      </h2>
-      <p className="text-muted mb-3 text-sm">Get a system notification when a reminder is due, even if Meetspace is in a background tab.</p>
-      {perm === 'granted' ? (
-        <p className="text-sm text-emerald-600">Enabled for this browser.</p>
-      ) : perm === 'denied' ? (
-        <p className="text-muted text-sm">Blocked — allow notifications for this site in your browser settings.</p>
-      ) : (
-        <button onClick={async () => setPerm(await Notification.requestPermission())} className="bg-brand-600 rounded-lg px-4 py-1.5 text-sm font-semibold text-white">
-          Enable notifications
-        </button>
-      )}
-    </section>
-  )
-}

@@ -32,6 +32,7 @@ import {
 import { useStore } from '../store/useStore'
 import { Modal } from './components/ui'
 import { useAssistant } from './ai/useAssistant'
+import { useCreateTask } from './task/CreateTaskModal'
 import { useCall } from './calls/useCall'
 import { useRecorder } from './clips/Recorder'
 import { api } from '../api/client'
@@ -42,9 +43,9 @@ import { cn, timeAgo } from '../lib/utils'
  * Results stream in as you type; ↑↓ to move, ↵ to open, ⌘↵ to open in a new tab.
  */
 
-type DocType = 'task' | 'doc' | 'message' | 'comment' | 'clip' | 'goal' | 'whiteboard' | 'form' | 'list' | 'folder' | 'project' | 'meeting' | 'channel'
+export type DocType = 'task' | 'doc' | 'message' | 'comment' | 'clip' | 'goal' | 'whiteboard' | 'form' | 'list' | 'folder' | 'project' | 'meeting' | 'channel'
 
-interface Hit {
+export interface Hit {
   type: DocType
   entity_id: string
   title: string
@@ -54,13 +55,13 @@ interface Hit {
   updated_at: string
 }
 
-interface Results {
+export interface Results {
   total: number
   hits: Hit[]
   counts: Record<string, number>
 }
 
-const TYPE_META: Record<DocType, { icon: LucideIcon; label: string }> = {
+export const TYPE_META: Record<DocType, { icon: LucideIcon; label: string }> = {
   task: { icon: CheckSquare, label: 'Task' },
   doc: { icon: FileText, label: 'Doc' },
   message: { icon: MessagesSquare, label: 'Message' },
@@ -93,6 +94,38 @@ interface Command {
   icon: LucideIcon
   keywords: string
   run: () => void
+}
+
+/** Where each kind of search result opens. */
+export function routeForHit(h: Hit): string {
+  switch (h.type) {
+    case 'task':
+      return `/app/t/${h.entity_id}`
+    case 'comment':
+      return `/app/t/${h.parent}`
+    case 'doc':
+      return `/app/docs/${h.entity_id}`
+    case 'message':
+      return `/app/chat/${h.parent}?m=${h.entity_id}`
+    case 'channel':
+      return `/app/chat/${h.entity_id}`
+    case 'clip':
+      return '/app/clips'
+    case 'meeting':
+      return '/app/chat/calls'
+    case 'goal':
+      return '/app/goals'
+    case 'whiteboard':
+      return `/app/whiteboards/${h.entity_id}`
+    case 'form':
+      return `/app/forms/${h.entity_id}`
+    case 'list':
+      return `/app/list/${h.entity_id}`
+    case 'folder':
+      return `/app/space/${h.parent}`
+    case 'project':
+      return `/app/space/${h.entity_id}`
+  }
 }
 
 export default function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -149,37 +182,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     }
   }, [open, term, scope, sort, commandMode, s.currentWorkspaceId])
 
-  // Where each kind of result opens.
-  const routeFor = (h: Hit): string => {
-    switch (h.type) {
-      case 'task':
-        return `/app/t/${h.entity_id}`
-      case 'comment':
-        return `/app/t/${h.parent}`
-      case 'doc':
-        return `/app/docs/${h.entity_id}`
-      case 'message':
-        return `/app/chat/${h.parent}`
-      case 'channel':
-        return `/app/chat/${h.entity_id}`
-      case 'clip':
-        return '/app/clips'
-      case 'meeting':
-        return '/app/chat/calls'
-      case 'goal':
-        return '/app/goals'
-      case 'whiteboard':
-        return `/app/whiteboards/${h.entity_id}`
-      case 'form':
-        return `/app/forms/${h.entity_id}`
-      case 'list':
-        return `/app/list/${h.entity_id}`
-      case 'folder':
-        return `/app/space/${h.parent}`
-      case 'project':
-        return `/app/space/${h.entity_id}`
-    }
-  }
+  const routeFor = routeForHit
 
   const contextFor = (h: Hit): string => {
     const list = (id?: string) => s.lists.find((l) => l.id === id)
@@ -226,10 +229,9 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     onClose()
     nav(to)
   }
-  const firstList = () => s.lists[0]?.id
   const commands: Command[] = useMemo(
     () => [
-      { id: 'new-task', label: 'Create a task', hint: 'C', icon: Plus, keywords: 'new add todo', run: () => { const l = firstList(); if (l && s.currentUserId) { onClose(); s.openTask(s.addTask({ listId: l, title: 'New task', assignees: [s.currentUserId] })) } } },
+      { id: 'new-task', label: 'Create a task', hint: 'C', icon: Plus, keywords: 'new add todo', run: () => { onClose(); useCreateTask.getState().open({ assignees: s.currentUserId ? [s.currentUserId] : [] }) } },
       { id: 'new-doc', label: 'Write a doc', icon: FileText, keywords: 'new page note', run: () => go(`/app/docs/${s.addDoc(null)}`) },
       { id: 'new-board', label: 'Open a blank whiteboard', icon: PenTool, keywords: 'new draw sketch', run: () => go(`/app/whiteboards/${s.addWhiteboard()}`) },
       { id: 'call', label: 'Start a video call', icon: Video, keywords: 'meet huddle', run: () => { onClose(); void useCall.getState().prepare({ title: 'Quick meeting', kind: 'video', channelId: null, meetingId: null, invitees: [] }) } },
@@ -450,7 +452,14 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
         <span className="hidden items-center gap-1 sm:flex">
           <Kbd>Tab</Kbd> switch scope
         </span>
-        <span className="ml-auto">{results && !commandMode && term ? `${results.total} result${results.total === 1 ? '' : 's'}` : 'Type > for commands'}</span>
+        <span className="ml-auto flex items-center gap-2">
+          {results && !commandMode && term ? `${results.total} result${results.total === 1 ? '' : 's'}` : 'Type > for commands'}
+          {results && !commandMode && term && (
+            <button onClick={() => (onClose(), nav(`/app/search?q=${encodeURIComponent(term)}`))} className="text-brand-600 font-semibold hover:underline">
+              See all & filter →
+            </button>
+          )}
+        </span>
       </div>
     </Modal>
   )
