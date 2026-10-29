@@ -22,9 +22,12 @@ type User struct {
 	TOTPEnabled  bool
 	TOTPRecovery []string
 	IsActive     bool
-	LastLoginAt  *time.Time
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// ConsentVersion is the Privacy Policy and Terms version the person accepted.
+	ConsentVersion string
+	ConsentedAt    *time.Time
+	LastLoginAt    *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type RefreshToken struct {
@@ -77,6 +80,9 @@ var (
 	ErrMFAExpired         = apperror.Unauthorized("mfa_expired", "the sign-in took too long; start again")
 	ErrTOTPNotSetUp       = apperror.Invalid("totp_not_set_up", "start two-factor setup first")
 	ErrSSOUnverified      = apperror.Forbidden("sso_email_unverified", "your provider hasn't verified this email address")
+	ErrOldPolicy          = apperror.Invalid("old_policy", "that isn't the current Privacy Policy; reload and try again")
+	ErrErasePassword      = apperror.Invalid("confirm_delete", "That password isn't right.")
+	ErrEraseEmail         = apperror.Invalid("confirm_delete", "Type your account's email address exactly to confirm.")
 )
 
 type UserRepository interface {
@@ -89,6 +95,9 @@ type UserRepository interface {
 	UpdatePassword(ctx context.Context, id, hash string) error
 	UpdateLastLogin(ctx context.Context, id string, at time.Time) error
 	SetTOTP(ctx context.Context, id string, sealed []byte, enabled bool, recovery []string) error
+	SetConsent(ctx context.Context, id, version string, at time.Time) error
+	// Erase removes everything that identifies the person and signs them out everywhere.
+	Erase(ctx context.Context, id string) error
 }
 
 type IdentityRepository interface {

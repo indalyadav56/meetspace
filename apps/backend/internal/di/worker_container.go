@@ -18,8 +18,8 @@ import (
 // keeping the search index in step with every change published on the bus.
 type WorkerContainer struct {
 	*Shared
-	Notify *notifyapp.Service
-	Search *searchapp.Service
+	Notify   *notifyapp.Service
+	Search   *searchapp.Service
 	Audit    *auditapp.Service
 	Delivery *notifyapp.Delivery
 	Bus      realtimedomain.Bus

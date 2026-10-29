@@ -51,6 +51,14 @@ func (m *memUsers) UpdateStatus(_ context.Context, id, emoji, text string, until
 	u.StatusEmoji, u.StatusText, u.StatusUntil = emoji, text, until
 	return nil
 }
+func (m *memUsers) SetConsent(_ context.Context, id, version string, at time.Time) error {
+	m.byID[id].ConsentVersion, m.byID[id].ConsentedAt = version, &at
+	return nil
+}
+func (m *memUsers) Erase(_ context.Context, id string) error {
+	delete(m.byID, id)
+	return nil
+}
 func (m *memUsers) UpdatePassword(_ context.Context, id, hash string) error {
 	m.byID[id].PasswordHash = hash
 	return nil

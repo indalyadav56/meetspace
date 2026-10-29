@@ -73,7 +73,6 @@ func chatPoster(chat *chatapp.Service) assistantapp.Poster {
 	}
 }
 
-
 // askLLM hands the assistant the one-shot client, or nil when AI is off.
 func askLLM(c *gemini.Client) assistantapp.LLM {
 	if c == nil {

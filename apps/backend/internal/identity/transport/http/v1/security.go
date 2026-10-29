@@ -161,7 +161,9 @@ func (h *Handler) Providers(c *gin.Context) {
 	response.Data(c, http.StatusOK, out)
 }
 
-func (h *Handler) callbackURL(id string) string { return h.webURL + "/api/v1/auth/oauth/" + id + "/callback" }
+func (h *Handler) callbackURL(id string) string {
+	return h.webURL + "/api/v1/auth/oauth/" + id + "/callback"
+}
 
 // safePath keeps post-login redirects on this site.
 func safePath(p string) string {

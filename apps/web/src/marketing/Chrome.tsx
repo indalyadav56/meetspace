@@ -256,13 +256,13 @@ export function MarketingFooter() {
         <div className="mt-14 flex flex-col gap-4 border-t border-stone-800 pt-8 text-xs sm:flex-row sm:items-center">
           <span>© {new Date().getFullYear()} Meetspace. All rights reserved.</span>
           <div className="flex gap-5 sm:ml-auto">
-            <a href="#" className="hover:text-white">
+            <a href="/privacy" className="hover:text-white">
               Privacy
             </a>
-            <a href="#" className="hover:text-white">
+            <a href="/terms" className="hover:text-white">
               Terms
             </a>
-            <a href="#" className="hover:text-white">
+            <a href="/privacy#cookies" className="hover:text-white">
               Cookies
             </a>
           </div>

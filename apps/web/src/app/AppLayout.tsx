@@ -14,6 +14,7 @@ import CreateTaskModal from './task/CreateTaskModal'
 import CommandPalette from './CommandPalette'
 import { cn } from '../lib/utils'
 import { refreshPush } from './notifications/push'
+import { ConsentGate } from './privacy/ConsentGate'
 import { X } from 'lucide-react'
 
 /** Short-lived messages, e.g. a change the server rejected. */
@@ -124,6 +125,7 @@ export default function AppLayout() {
       <CallLayer />
       <Recorder />
       <Toaster />
+      <ConsentGate />
     </div>
   )
 }

@@ -18,13 +18,14 @@ type UserRepository struct{ db *sql.DB }
 
 func NewUserRepository(db *sql.DB) *UserRepository { return &UserRepository{db: db} }
 
-const userCols = `id, email, full_name, color, status_emoji, status_text, status_until, totp_secret, totp_enabled, totp_recovery, password_hash, is_active, last_login_at, created_at, updated_at`
+const userCols = `id, email, full_name, color, status_emoji, status_text, status_until, totp_secret, totp_enabled, totp_recovery, password_hash, is_active, consent_version, consented_at, last_login_at, created_at, updated_at`
 
 func scanUser(row interface{ Scan(...any) error }) (*domain.User, error) {
 	var u domain.User
-	var last, until sql.NullTime
+	var last, until, consented sql.NullTime
+	var consent sql.NullString
 	var recovery []byte
-	if err := row.Scan(&u.ID, &u.Email, &u.FullName, &u.Color, &u.StatusEmoji, &u.StatusText, &until, &u.TOTPSecret, &u.TOTPEnabled, &recovery, &u.PasswordHash, &u.IsActive, &last, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Email, &u.FullName, &u.Color, &u.StatusEmoji, &u.StatusText, &until, &u.TOTPSecret, &u.TOTPEnabled, &recovery, &u.PasswordHash, &u.IsActive, &consent, &consented, &last, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, domain.ErrUserNotFound
 		}
@@ -36,6 +37,10 @@ func scanUser(row interface{ Scan(...any) error }) (*domain.User, error) {
 	if until.Valid {
 		u.StatusUntil = &until.Time
 	}
+	if consented.Valid {
+		u.ConsentedAt = &consented.Time
+	}
+	u.ConsentVersion = consent.String
 	_ = json.Unmarshal(recovery, &u.TOTPRecovery)
 	return &u, nil
 }
@@ -113,6 +118,36 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, id, hash string) er
 func (r *UserRepository) UpdateLastLogin(ctx context.Context, id string, at time.Time) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE auth.users SET last_login_at=$2 WHERE id=$1`, id, at)
 	return err
+}
+
+func (r *UserRepository) SetConsent(ctx context.Context, id, version string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE auth.users SET consent_version=$2, consented_at=$3, updated_at=now() WHERE id=$1`, id, version, at)
+	return err
+}
+
+// Erase anonymises the account rather than deleting the row, so tasks and
+// messages the person wrote in shared workspaces keep working; nothing left on
+// it identifies them. The email is freed so they could sign up again.
+func (r *UserRepository) Erase(ctx context.Context, id string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	for _, q := range []string{
+		`UPDATE auth.users SET email = 'deleted-' || id || '@deleted.invalid', full_name = 'Deleted user', color = '#a8a29e',
+			password_hash = '!deleted', status_emoji = '', status_text = '', status_until = NULL,
+			totp_secret = NULL, totp_enabled = FALSE, totp_recovery = '[]', is_active = FALSE,
+			last_login_at = NULL, deleted_at = now(), updated_at = now() WHERE id = $1`,
+		`DELETE FROM auth.refresh_tokens WHERE user_id = $1`,
+		`DELETE FROM auth.password_reset_tokens WHERE user_id = $1`,
+		`DELETE FROM auth.identities WHERE user_id = $1`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func itoa(i int) string {

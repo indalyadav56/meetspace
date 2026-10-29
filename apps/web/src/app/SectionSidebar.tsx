@@ -21,7 +21,7 @@ import {
   Plus,
   Settings,
   ScrollText,
-  ShieldCheck,
+  ShieldCheck, UserLock,
   Share2,
   Star,
   Archive,
@@ -391,6 +391,7 @@ function SettingsSidebar() {
       </Group>
       <Group label="Security">
         <Row to="/app/settings?tab=security" icon={ShieldCheck} label="Security & sign-in" keys={['tab']} />
+        <Row to="/app/settings?tab=privacy" icon={UserLock} label="Privacy & data" keys={['tab']} />
         <Row to="/app/settings?tab=audit" icon={ScrollText} label="Audit log" keys={['tab']} />
       </Group>
       <Group label="Features">

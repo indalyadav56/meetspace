@@ -26,6 +26,7 @@ type Config struct {
 	Resend     Resend     `mapstructure:"resend"`
 	OAuth      OAuth      `mapstructure:"oauth"`
 	Inbound    Inbound    `mapstructure:"inbound"`
+	Privacy    Privacy    `mapstructure:"privacy"`
 	// Integrations configures third-party connections such as GitHub.
 	Integrations Integrations  `mapstructure:"integrations"`
 	SMTP         SMTP          `mapstructure:"smtp"`
@@ -166,6 +167,13 @@ type Integrations struct {
 
 // Resend sends transactional email (password resets, invites) through the
 // Resend API. It takes precedence over SMTP when APIKey is set.
+// Privacy holds the grievance officer published on the Privacy Policy.
+type Privacy struct {
+	GrievanceName    string `mapstructure:"grievance_name"`
+	GrievanceEmail   string `mapstructure:"grievance_email"`
+	GrievanceAddress string `mapstructure:"grievance_address"`
+}
+
 // Inbound configures email-to-task. Point your provider's inbound webhook
 // (Postmark, Mailgun, SendGrid…) at /api/v1/inbound/email/<secret>.
 type Inbound struct {

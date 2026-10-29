@@ -64,12 +64,14 @@ func NewRouter(o Options) *gin.Engine {
 	h.Identity.RegisterUsers(users)
 	h.Audit.RegisterUser(users)
 	h.Notify.RegisterUser(users)
+	h.Privacy.Register(users)
 
 	// Unauthenticated integrations.
 	public := v1.Group("/public")
 	h.Work.RegisterPublic(public, ratelimit.New(30, time.Minute).Middleware())
 	h.Share.RegisterPublic(public, ratelimit.New(120, time.Minute).Middleware())
 	h.Calendar.RegisterPublic(public, ratelimit.New(60, time.Minute).Middleware())
+	h.Privacy.RegisterPublic(public)
 	v1.POST("/livekit/webhook", h.Meet.Webhook)
 	h.Work.RegisterInbound(v1, ratelimit.New(120, time.Minute).Middleware())
 	// GitHub deliveries are verified with the workspace's webhook secret (HMAC).

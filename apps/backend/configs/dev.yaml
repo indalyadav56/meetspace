@@ -72,6 +72,13 @@ resend:
   api_key: ""              # APP_RESEND_API_KEY
   from: ""                 # APP_RESEND_FROM; default "Meetspace <onboarding@resend.dev>" (test only)
 
+# Grievance officer shown on the Privacy Policy (India DPDP Act: people must be
+# able to reach someone about their personal data).
+privacy:
+  grievance_name: "Grievance Officer"   # APP_PRIVACY_GRIEVANCE_NAME
+  grievance_email: ""                   # APP_PRIVACY_GRIEVANCE_EMAIL, e.g. "privacy@yourcompany.com"
+  grievance_address: ""                 # APP_PRIVACY_GRIEVANCE_ADDRESS, postal address (optional)
+
 # Email-to-task: mail sent to <list token>@<domain> becomes a task.
 inbound:
   domain: ""   # APP_INBOUND_DOMAIN, e.g. "in.yourcompany.com" (MX handled by your email provider)

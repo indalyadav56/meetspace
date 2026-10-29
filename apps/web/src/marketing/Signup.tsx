@@ -54,6 +54,7 @@ export default function SignupPage() {
   const [invites, setInvites] = useState<string[]>(['', ''])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [agreed, setAgreed] = useState(false)
 
   // Someone already signed in who lands here (not mid-wizard) goes to the app.
   const startedHere = useRef(false)
@@ -66,7 +67,7 @@ export default function SignupPage() {
     setError(null)
     try {
       startedHere.current = true
-      await signUp(name.trim(), email.trim(), password)
+      await signUp(name.trim(), email.trim(), password, agreed)
       setWsName(`${name.trim().split(' ')[0]}’s Workspace`)
       setStep('use')
     } catch (e) {
@@ -135,6 +136,20 @@ export default function SignupPage() {
                 </button>
               </div>
               <PasswordHint password={password} />
+              <label className="mt-4 flex items-start gap-2 text-sm text-stone-600">
+                <input type="checkbox" required checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 accent-brand-600" />
+                <span>
+                  I’m 18 or older and I agree to the{' '}
+                  <Link to="/terms" target="_blank" className="font-medium text-stone-900 underline">
+                    Terms of Service
+                  </Link>{' '}
+                  and{' '}
+                  <Link to="/privacy" target="_blank" className="font-medium text-stone-900 underline">
+                    Privacy Policy
+                  </Link>
+                  .
+                </span>
+              </label>
               {error === 'exists' ? (
                 <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
                   There’s already an account for this email.{' '}
@@ -145,10 +160,9 @@ export default function SignupPage() {
               ) : (
                 error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
               )}
-              <button disabled={busy || !name.trim() || password.length < 8} className="mt-5 h-11 w-full rounded-xl bg-brand-600 font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
+              <button disabled={busy || !agreed || !name.trim() || password.length < 8} className="mt-5 h-11 w-full rounded-xl bg-brand-600 font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
                 {busy ? 'Creating your account…' : 'Create account'}
               </button>
-              <p className="mt-4 text-center text-xs text-stone-500">By creating an account you agree to the Terms of Service and Privacy Policy.</p>
             </form>
           )}
         </div>

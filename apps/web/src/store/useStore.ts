@@ -142,7 +142,8 @@ interface State {
   /** Starts a session from tokens handed back by single sign-on. */
   signInWithTokens: (tokens: Tokens) => Promise<void>
   /** Creates the account and signs in, without loading a workspace (onboarding creates it next). */
-  signUp: (name: string, email: string, password: string) => Promise<void>
+  /** acceptTerms records the person's consent to the Terms and Privacy Policy; sign-up fails without it. */
+  signUp: (name: string, email: string, password: string, acceptTerms: boolean) => Promise<void>
   /** Final onboarding step: creates the user's first workspace, invites teammates and adds starter Lists. */
   setupWorkspace: (opts: { name: string; color: string; invites: string[]; templates: string[]; tools: StarterTool[] }) => Promise<void>
   bootstrap: () => Promise<void>
@@ -586,8 +587,8 @@ export const useStore = create<State>()(
           const user = await api.get<User>('/users/me')
           await startSession(t, user)
         },
-        signUp: async (name, email, password) => {
-          const r = await api.raw<{ user: User; tokens: Tokens }>('POST', '/auth/register', { body: { fullName: name, email, password }, anonymous: true })
+        signUp: async (name, email, password, acceptTerms) => {
+          const r = await api.raw<{ user: User; tokens: Tokens }>('POST', '/auth/register', { body: { fullName: name, email, password, acceptTerms }, anonymous: true })
           await startSession(r.tokens, r.user, false)
         },
         setupWorkspace: async ({ name, color, invites, templates, tools }) => {

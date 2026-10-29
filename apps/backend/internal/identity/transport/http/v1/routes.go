@@ -38,4 +38,6 @@ func (h *Handler) RegisterUsers(rg *gin.RouterGroup) {
 	rg.DELETE("/me/sessions/:sid", h.revokeSession)
 	rg.POST("/me/sessions/revoke-others", h.revokeOthers)
 	rg.GET("/me/identities", h.identities)
+	rg.GET("/me/consent", h.consent)
+	rg.POST("/me/consent", h.acceptConsent)
 }

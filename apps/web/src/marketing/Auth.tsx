@@ -116,7 +116,7 @@ function AuthShell({ mode }: { mode: 'login' | 'signup' }) {
     setBusy(true)
     setError(null)
     try {
-      if (isSignup) await signUp(name.trim(), email.trim(), password)
+      if (isSignup) await signUp(name.trim(), email.trim(), password, false)
       else {
         const r = await signIn(email.trim(), password)
         if (r.mfaToken) return setMfaToken(r.mfaToken)

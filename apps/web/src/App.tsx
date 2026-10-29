@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-do
 import { useStore } from './store/useStore'
 import Landing from './marketing/Landing'
 import Pricing from './marketing/Pricing'
+import { PrivacyPage, TermsPage } from './marketing/Legal'
 import { AuthCallbackPage, LoginPage } from './marketing/Auth'
 import SharedPage from './marketing/SharedPage'
 import SignupPage from './marketing/Signup'
@@ -100,6 +101,8 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/pricing" element={<Pricing />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/s/:token" element={<SharedPage />} />

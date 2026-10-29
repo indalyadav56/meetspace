@@ -16,21 +16,21 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"github.com/indalyadav56/meetspace/backend/internal/config"
-	auditapp "github.com/indalyadav56/meetspace/backend/internal/audit/application"
-	calapp "github.com/indalyadav56/meetspace/backend/internal/calfeed/application"
-	calpg "github.com/indalyadav56/meetspace/backend/internal/calfeed/infrastructure/postgres"
-	calhttp "github.com/indalyadav56/meetspace/backend/internal/calfeed/transport/http/v1"
-	auditpg "github.com/indalyadav56/meetspace/backend/internal/audit/infrastructure/postgres"
-	audithttp "github.com/indalyadav56/meetspace/backend/internal/audit/transport/http/v1"
 	assistantapp "github.com/indalyadav56/meetspace/backend/internal/assistant/application"
 	"github.com/indalyadav56/meetspace/backend/internal/assistant/infrastructure/adk"
 	"github.com/indalyadav56/meetspace/backend/internal/assistant/infrastructure/gemini"
 	assistantpg "github.com/indalyadav56/meetspace/backend/internal/assistant/infrastructure/postgres"
 	assistanthttp "github.com/indalyadav56/meetspace/backend/internal/assistant/transport/http/v1"
+	auditapp "github.com/indalyadav56/meetspace/backend/internal/audit/application"
+	auditpg "github.com/indalyadav56/meetspace/backend/internal/audit/infrastructure/postgres"
+	audithttp "github.com/indalyadav56/meetspace/backend/internal/audit/transport/http/v1"
+	calapp "github.com/indalyadav56/meetspace/backend/internal/calfeed/application"
+	calpg "github.com/indalyadav56/meetspace/backend/internal/calfeed/infrastructure/postgres"
+	calhttp "github.com/indalyadav56/meetspace/backend/internal/calfeed/transport/http/v1"
 	chatapp "github.com/indalyadav56/meetspace/backend/internal/chat/application"
 	chatpg "github.com/indalyadav56/meetspace/backend/internal/chat/infrastructure/postgres"
 	chathttp "github.com/indalyadav56/meetspace/backend/internal/chat/transport/http/v1"
+	"github.com/indalyadav56/meetspace/backend/internal/config"
 	docsapp "github.com/indalyadav56/meetspace/backend/internal/docs/application"
 	docspg "github.com/indalyadav56/meetspace/backend/internal/docs/infrastructure/postgres"
 	docshttp "github.com/indalyadav56/meetspace/backend/internal/docs/transport/http/v1"
@@ -59,15 +59,18 @@ import (
 	notifyapp "github.com/indalyadav56/meetspace/backend/internal/notify/application"
 	notifypg "github.com/indalyadav56/meetspace/backend/internal/notify/infrastructure/postgres"
 	notifyhttp "github.com/indalyadav56/meetspace/backend/internal/notify/transport/http/v1"
+	privacyapp "github.com/indalyadav56/meetspace/backend/internal/privacy/application"
+	privacypg "github.com/indalyadav56/meetspace/backend/internal/privacy/infrastructure/postgres"
+	privacyhttp "github.com/indalyadav56/meetspace/backend/internal/privacy/transport/http/v1"
 	realtimeapp "github.com/indalyadav56/meetspace/backend/internal/realtime/application"
 	realtimeredis "github.com/indalyadav56/meetspace/backend/internal/realtime/infrastructure/redis"
 	realtimews "github.com/indalyadav56/meetspace/backend/internal/realtime/transport/ws"
 	searchapp "github.com/indalyadav56/meetspace/backend/internal/search/application"
+	searchpg "github.com/indalyadav56/meetspace/backend/internal/search/infrastructure/postgres"
+	searchhttp "github.com/indalyadav56/meetspace/backend/internal/search/transport/http/v1"
 	shareapp "github.com/indalyadav56/meetspace/backend/internal/share/application"
 	sharepg "github.com/indalyadav56/meetspace/backend/internal/share/infrastructure/postgres"
 	sharehttp "github.com/indalyadav56/meetspace/backend/internal/share/transport/http/v1"
-	searchpg "github.com/indalyadav56/meetspace/backend/internal/search/infrastructure/postgres"
-	searchhttp "github.com/indalyadav56/meetspace/backend/internal/search/transport/http/v1"
 	workapp "github.com/indalyadav56/meetspace/backend/internal/work/application"
 	workpg "github.com/indalyadav56/meetspace/backend/internal/work/infrastructure/postgres"
 	workhttp "github.com/indalyadav56/meetspace/backend/internal/work/transport/http/v1"
@@ -90,6 +93,7 @@ const (
 // Handlers is everything the router mounts.
 type Handlers struct {
 	Identity     *identityhttp.Handler
+	Privacy      *privacyhttp.Handler
 	Audit        *audithttp.Handler
 	Share        *sharehttp.Handler
 	DocCollab    *docsws.Collab
@@ -132,8 +136,8 @@ type Services struct {
 type ServerContainer struct {
 	*Shared
 	// Ready checks every backing service the API needs (database, Redis, object storage).
-	Ready    func(context.Context) error
-	Hub      *realtimeapp.Hub
+	Ready func(context.Context) error
+	Hub   *realtimeapp.Hub
 	// Jobs run in the background for the server's lifetime.
 	Jobs     []func(context.Context)
 	Services Services
@@ -290,7 +294,7 @@ func NewServerContainer(ctx context.Context, sh *Shared) (*ServerContainer, erro
 			}
 			return storeReady(ctx)
 		},
-		Hub:      hub,
+		Hub: hub,
 		// Scheduled agents post their reports to chat; claims make this safe on several replicas.
 		Jobs: []func(context.Context){func(ctx context.Context) {
 			t := time.NewTicker(time.Minute)
@@ -310,8 +314,10 @@ func NewServerContainer(ctx context.Context, sh *Shared) (*ServerContainer, erro
 		}},
 		Services: Services{Auth: authSvc, Users: userSvc, Workspaces: wsSvc, Work: workSvc, Docs: docsSvc, Goals: goalsSvc, Chat: chatSvc, Notify: notifySvc, Media: mediaSvc, Meet: meetSvc, Search: searchSvc, Integrations: integrationsSvc},
 		Handlers: Handlers{
-			Identity:     identityhttp.NewHandler(authSvc, userSvc).WithSecurity(auditSvc, ssoProviders(cfg), cfg.Web.URL),
-			Audit:        audithttp.NewHandler(auditSvc),
+			Identity: identityhttp.NewHandler(authSvc, userSvc).WithSecurity(auditSvc, ssoProviders(cfg), cfg.Web.URL),
+			Audit:    audithttp.NewHandler(auditSvc),
+			Privacy: privacyhttp.NewHandler(privacyapp.NewService(privacyAccount{authSvc}, privacyWorkspaces{wsSvc}, privacyActivity{auditSvc}, privacypg.NewRepository(db),
+				privacyapp.Contact{Name: cfg.Privacy.GrievanceName, Email: cfg.Privacy.GrievanceEmail, Address: cfg.Privacy.GrievanceAddress}), auditSvc),
 			Share:        sharehttp.NewHandler(shareSvc),
 			DocCollab:    docsws.NewCollab(docspg.NewRepository(db), docCollabAccess(docsSvc, workSvc, wsSvc), cfg.Web.AllowedOrigins, log),
 			Calendar:     calhttp.NewHandler(calapp.NewService(calpg.NewRepository(db), calSource{workSvc, meetSvc, wsSvc}, cfg.Web.URL), cfg.Web.URL),

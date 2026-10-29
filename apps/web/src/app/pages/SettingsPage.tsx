@@ -3,6 +3,7 @@ import { useQueryState } from '../../lib/useQueryState'
 import { TagManager, Trash } from './settings/TagsAndTrash'
 import Security from './settings/Security'
 import CalendarSync from './settings/CalendarSync'
+import PrivacyData from './settings/PrivacyData'
 import Importer from '../import/Importer'
 import NotificationSettings from './settings/NotificationSettings'
 import AuditLog from './settings/AuditLog'
@@ -34,7 +35,7 @@ export default function SettingsPage() {
   const ws = s.workspaces.find((w) => w.id === s.currentWorkspaceId)!
   const myRole = ws.members.find((m) => m.userId === me.id)?.role ?? 'member'
   const canManage = myRole === 'owner' || myRole === 'admin'
-  const [tab, setTab] = useQueryState<'general' | 'members' | 'data' | 'notifications' | 'calendar' | 'security' | 'audit' | 'tags' | 'trash'>('tab', 'general')
+  const [tab, setTab] = useQueryState<'general' | 'members' | 'data' | 'notifications' | 'calendar' | 'security' | 'privacy' | 'audit' | 'tags' | 'trash'>('tab', 'general')
 
   return (
     <div className="h-full overflow-y-auto scroll-thin">
@@ -53,6 +54,7 @@ export default function SettingsPage() {
               ['notifications', 'Notifications'],
               ['calendar', 'Calendar sync'],
               ['security', 'Security'],
+              ['privacy', 'Privacy & data'],
               ...(canManage ? ([['audit', 'Audit log']] as const) : []),
               ['tags', 'Tags'],
               ['trash', 'Trash'],
@@ -85,6 +87,7 @@ export default function SettingsPage() {
         {tab === 'notifications' && <NotificationSettings />}
         {tab === 'calendar' && <CalendarSync />}
         {tab === 'security' && <Security />}
+        {tab === 'privacy' && <PrivacyData />}
         {tab === 'audit' && (canManage ? <AuditLog /> : <p className="text-muted text-sm">Only workspace owners and admins can view the audit log.</p>)}
         {tab === 'tags' && <TagManager />}
         {tab === 'trash' && <Trash />}

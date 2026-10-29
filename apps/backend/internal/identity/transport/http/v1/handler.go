@@ -12,6 +12,7 @@ import (
 	"github.com/indalyadav56/meetspace/backend/internal/identity/application"
 	"github.com/indalyadav56/meetspace/backend/internal/identity/domain"
 	"github.com/indalyadav56/meetspace/backend/internal/identity/infrastructure/oidc"
+	"github.com/indalyadav56/meetspace/backend/pkg/apperror"
 	"github.com/indalyadav56/meetspace/backend/pkg/authctx"
 	"github.com/indalyadav56/meetspace/backend/pkg/optional"
 	"github.com/indalyadav56/meetspace/backend/pkg/response"
@@ -57,6 +58,8 @@ type registerReq struct {
 	Email    string `json:"email" binding:"required,email,max=255"`
 	FullName string `json:"fullName" binding:"max=255"`
 	Password string `json:"password" binding:"required"`
+	// AcceptTerms must be true: signing up records consent to the Privacy Policy and Terms.
+	AcceptTerms bool `json:"acceptTerms"`
 }
 
 type loginReq struct {
@@ -83,8 +86,8 @@ type changeReq struct {
 }
 
 type updateMeReq struct {
-	FullName *string                             `json:"name"`
-	Color    *string                             `json:"color"`
+	FullName *string                            `json:"name"`
+	Color    *string                            `json:"color"`
 	Status   optional.Field[application.Status] `json:"status"`
 }
 
@@ -109,8 +112,16 @@ func (h *Handler) Register(c *gin.Context) {
 		response.BadRequest(c, err)
 		return
 	}
+	if !req.AcceptTerms {
+		response.FromError(c, apperror.Invalid("terms_required", "please agree to the Terms of Service and Privacy Policy"))
+		return
+	}
 	u, pair, err := h.auth.Register(ctx(c), req.Email, req.FullName, req.Password)
 	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	if _, err := h.users.AcceptPolicy(c.Request.Context(), u.ID, application.PolicyVersion); err != nil {
 		response.FromError(c, err)
 		return
 	}
@@ -242,4 +253,31 @@ func (h *Handler) UpdateMe(c *gin.Context) {
 		return
 	}
 	response.Data(c, http.StatusOK, p)
+}
+
+func (h *Handler) consent(c *gin.Context) {
+	out, err := h.users.Consent(c.Request.Context(), authctx.UserID(c))
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	response.Data(c, http.StatusOK, out)
+}
+
+func (h *Handler) acceptConsent(c *gin.Context) {
+	var req struct {
+		Version string `json:"version" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err)
+		return
+	}
+	user := authctx.UserID(c)
+	out, err := h.users.AcceptPolicy(c.Request.Context(), user, req.Version)
+	if err != nil {
+		response.FromError(c, err)
+		return
+	}
+	h.record(c, user, "privacy.consented", map[string]any{"version": req.Version})
+	response.Data(c, http.StatusOK, out)
 }
